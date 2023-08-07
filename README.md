@@ -36,7 +36,7 @@
 - Right Settings Button – Oculus Menu
 - Left Joystick
 	- Press – Cycle Scenes
-	- Up/Down/Left/Right – Strafe
+	- Up/Down/Left/Right – Move/Strafe
 - Right Joystick
 	- Press – Cycle Demos
 	- Left/Right – Turn

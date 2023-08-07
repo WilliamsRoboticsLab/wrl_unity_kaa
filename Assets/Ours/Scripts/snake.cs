@@ -350,6 +350,7 @@ unsafe public class snake : MonoBehaviour {
                 }
                 //curState = State.Relaxing;
                 DrawMesh(); 
+                UpdateCables();
                 curState = State.Starting;         
                 nodeManager.nodes[0].SetActive(true);
             } //reset

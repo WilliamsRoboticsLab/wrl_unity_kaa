@@ -2,9 +2,10 @@
 
 ## Setup Guide
 - Pull the project from GitHub
-	- Use the command “git clone https://github.com/WilliamsRoboticsLab/wrl_unity_kaa.git” in your terminal to clone the project repository
+	- Use the command < git clone https://github.com/WilliamsRoboticsLab/wrl_unity_kaa.git > in terminal to clone the project repository.
+	- Refer to < https://docs.github.com/en/get-started/getting-started-with-git/about-remote-repositories > and < https://docs.github.com/en/get-started/getting-started-with-git/caching-your-github-credentials-in-git > if you encounter issues with cloning
 - Install Unity Hub
-	- Go to <https://unity.com/download>.
+	- Go to < https://unity.com/download >.
 	- Click “Download for Windows.”
 	- Run UnityHubSetup.exe.
 	- Follow the instructions in the Unity Hub setup wizard.

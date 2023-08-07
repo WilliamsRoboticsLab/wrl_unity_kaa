@@ -35,12 +35,12 @@
 - Left Settings Button – Pause Kinematics
 - Right Settings Button – Oculus Menu
 - Left Joystick
-- Press – Cycle Scenes
-- Up/Down/Left/Right – Strafe
+	- Press – Cycle Scenes
+	- Up/Down/Left/Right – Strafe
 - Right Joystick
-- Press – Cycle Demos
-- Left/Right – Turn
-- Up/Down – Nothing
+	- Press – Cycle Demos
+	- Left/Right – Turn
+	- Up/Down – Nothing
 
 
 

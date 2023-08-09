@@ -344,7 +344,10 @@ delegate void cpp_reset() {
 delegate void cpp_init(bool _DRAGON_DRIVING = false) {
     // FORNOW
     DRAGON_DRIVING__SET_IN_CPP_INIT = _DRAGON_DRIVING;
-    if (_DRAGON_DRIVING) DRAGON_SHOW = true;
+    if (_DRAGON_DRIVING) {
+        DRAGON_SHOW = true;
+        if (!COW0._cow_initialized) _cow_init();
+    }
 
     ASSERT(!initialized);
     initialized = true;
@@ -1224,61 +1227,61 @@ void kaa() {
                 }
             }
 
-        }
 
-        { // widget
-            bool mouseClickConsumed = false;
-            bool mouseHotConsumed = false;
-            { // SPOOF_targetPositions
-                for_(featurePointIndex, MAX_NUM_FEATURE_POINTS) {
-                    if (!SPOOF_targetEnabled[featurePointIndex]) continue;
-                    vec3 color = color_kelly(featurePointIndex);
-                    vec3 SPOOF_feature_point_position = { SPOOF_feature_point_positions[3 * featurePointIndex + 0], SPOOF_feature_point_positions[3 * featurePointIndex + 1], SPOOF_feature_point_positions[3 * featurePointIndex + 2] };
+            { // widget
+                bool mouseClickConsumed = false;
+                bool mouseHotConsumed = false;
+                { // SPOOF_targetPositions
+                    for_(featurePointIndex, MAX_NUM_FEATURE_POINTS) {
+                        if (!SPOOF_targetEnabled[featurePointIndex]) continue;
+                        vec3 color = color_kelly(featurePointIndex);
+                        vec3 SPOOF_feature_point_position = { SPOOF_feature_point_positions[3 * featurePointIndex + 0], SPOOF_feature_point_positions[3 * featurePointIndex + 1], SPOOF_feature_point_positions[3 * featurePointIndex + 2] };
 
-                    WidgetResult widgetResult = widget(P, V, featurePointIndex, &SPOOF_targetPositions[featurePointIndex], SPOOF_feature_point_position, color);
+                        WidgetResult widgetResult = widget(P, V, featurePointIndex, &SPOOF_targetPositions[featurePointIndex], SPOOF_feature_point_position, color);
 
-                    mouseClickConsumed |= widgetResult.mouseClickConsumed; // FORNOW
-                    mouseHotConsumed |= widgetResult.mouseHotConsumed; // FORNOW
-                    if (widgetResult.pleaseDisableHandle) {
-                        SPOOF_targetEnabled[featurePointIndex] = FALSE;
+                        mouseClickConsumed |= widgetResult.mouseClickConsumed; // FORNOW
+                        mouseHotConsumed |= widgetResult.mouseHotConsumed; // FORNOW
+                        if (widgetResult.pleaseDisableHandle) {
+                            SPOOF_targetEnabled[featurePointIndex] = FALSE;
+                        }
+                        if (widgetResult.recastFeaturePoint) {
+                            castRay(true, featurePointIndex);
+                        }
                     }
-                    if (widgetResult.recastFeaturePoint) {
-                        castRay(true, featurePointIndex);
+                }
+
+
+                if (!mouseClickConsumed && !mouseHotConsumed) { // SPOOF_intersection_position
+                    bool pleaseSetFeaturePoint = globals.mouse_left_pressed;
+                    int featurePointIndex; {
+                        for (featurePointIndex = 0; SPOOF_targetEnabled[featurePointIndex]; ++featurePointIndex) {}
+                        ASSERT(featurePointIndex < MAX_NUM_FEATURE_POINTS);
+                    }
+                    CastRayResult castRayResult = castRay(pleaseSetFeaturePoint, featurePointIndex);
+                    if (!globals.mouse_left_held && castRayResult.intersects) draw_ball(P, V, castRayResult.intersection_position, color_kelly(featurePointIndex));
+                    if (castRayResult.intersects && pleaseSetFeaturePoint) {
+                        SPOOF_targetEnabled[featurePointIndex] = TRUE;
+                        SPOOF_targetPositions[featurePointIndex] = castRayResult.intersection_position;
                     }
                 }
             }
 
-
-            if (!mouseClickConsumed && !mouseHotConsumed) { // SPOOF_intersection_position
-                bool pleaseSetFeaturePoint = globals.mouse_left_pressed;
-                int featurePointIndex; {
-                    for (featurePointIndex = 0; SPOOF_targetEnabled[featurePointIndex]; ++featurePointIndex) {}
-                    ASSERT(featurePointIndex < MAX_NUM_FEATURE_POINTS);
+            { // ceiling
+                real r = 0.3;
+                eso_begin(PV, (tabs % 3 == 0) ? SOUP_QUADS : SOUP_OUTLINED_QUADS);
+                if (tabs % 3 == 0) {
+                    eso_color(1.0, 1.0, 1.0, 0.5);
+                } else {
+                    eso_color(0.0, 0.0, 0.0, 0.5);
                 }
-                CastRayResult castRayResult = castRay(pleaseSetFeaturePoint, featurePointIndex);
-                if (!globals.mouse_left_held && castRayResult.intersects) draw_ball(P, V, castRayResult.intersection_position, color_kelly(featurePointIndex));
-                if (castRayResult.intersects && pleaseSetFeaturePoint) {
-                    SPOOF_targetEnabled[featurePointIndex] = TRUE;
-                    SPOOF_targetPositions[featurePointIndex] = castRayResult.intersection_position;
-                }
+                eso_vertex( r, 0.0,  r);
+                eso_vertex( r, 0.0, -r);
+                eso_vertex(-r, 0.0, -r);
+                eso_vertex(-r, 0.0,  r);
+                eso_end();
             }
-        }
 
-        { // ceiling
-            real r = 0.3;
-            eso_begin(PV, (tabs % 3 == 0) ? SOUP_QUADS : SOUP_OUTLINED_QUADS);
-            if (tabs % 3 == 0) {
-                eso_color(1.0, 1.0, 1.0, 0.5);
-            } else {
-                eso_color(0.0, 0.0, 0.0, 0.5);
-            }
-            eso_vertex( r, 0.0,  r);
-            eso_vertex( r, 0.0, -r);
-            eso_vertex(-r, 0.0, -r);
-            eso_vertex(-r, 0.0,  r);
-            eso_end();
         }
-
 
         { // fornow
             if (globals.key_held['a']) SPOOF_targetPositions[0] = transformPoint(M4_RotationAboutYAxis(RAD(1)), SPOOF_targetPositions[0]);

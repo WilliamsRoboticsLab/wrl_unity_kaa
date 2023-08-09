@@ -353,7 +353,6 @@ delegate void cpp_init(bool _DRAGON_DRIVING = false) {
             HACK_RUNNING_ON_UNITY = true;
             _cow_init();
             _cow_reset();
-            eg_fbo();
         }
     }
 
@@ -564,6 +563,7 @@ delegate bool cpp_castRay(
     IntersectionResult result; {
         if (DRAGON_DRIVING__SET_IN_CPP_INIT) {
             if (HACK_RUNNING_ON_UNITY) cow_begin_frame();
+            dragonBody.bones = currentBones.data;
             result = GPU_pick(ray_origin, ray_direction, &dragonBody);
         } else {
             result = ray_mesh_intersection(ray_origin, ray_direction, currentState.x, sim.num_triangles, sim.triangle_indices);

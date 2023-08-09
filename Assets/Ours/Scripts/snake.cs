@@ -847,6 +847,7 @@ unsafe public class DragonMeshManager {
             bodyRend.sharedMesh.bindposes = bindPoses;
             bodyRend.bones = bodyBones;
             
+            // ?? NOTE MUST BE IN DESCENDING ORDER OF WEIGHT VALUE
             BoneWeight[] bone_weights = new BoneWeight[num_vertices];
             for (int i = 0; i < num_vertices; i++) {
                 bone_weights[i].boneIndex0 = cpp_bone_indices[i][0];

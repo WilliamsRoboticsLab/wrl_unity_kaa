@@ -35,7 +35,7 @@ IntersectionResult GPU_pick(vec3 ray_origin, vec3 ray_direction, IndexedTriangle
     int4 *bone_indices     = mesh->bone_indices;
     vec4 *bone_weights     = mesh->bone_weights;
 
-    bool DEBUG = false; // draws ray eye view
+    bool DEBUG = true; // draws ray eye view
 
     static char *picking_vertex_shader_source = R""(
             #version 330 core

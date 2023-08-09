@@ -234,7 +234,7 @@ unsafe public class snake : MonoBehaviour {
 
     public const float radius = 0.025f;
 
-    Vector3 node_pos;
+    // Vector3 node_pos;
     Color targetColor;
  
     NativeArray<float> intersection_position;
@@ -260,7 +260,7 @@ unsafe public class snake : MonoBehaviour {
         posOnSnake = new NativeArray<float3>(nodeManager.numNodes, Allocator.Persistent);
 
         targets = new GameObject[nodeManager.numNodes];
-        targets[0] = head;
+        //targets[0] = head;
         targetColor = targetPrefab.transform.GetComponent<MeshRenderer>().sharedMaterial.GetColor("_Color");
         curView = SNAKE;
         DMM = new DragonMeshManager(dragon_head, dragon_body);
@@ -343,7 +343,7 @@ unsafe public class snake : MonoBehaviour {
             {
                 nodeManager.Setup();
                 reset();
-                for(int k = 1; k < nodeManager.numNodes; k++){
+                for(int k = 0; k < nodeManager.numNodes; k++){
                     if(targets[k] != null) {
                         Destroy(targets[k]);
                     }
@@ -352,7 +352,7 @@ unsafe public class snake : MonoBehaviour {
                 DrawMesh(); 
                 UpdateCables();
                 curState = State.Starting;         
-                nodeManager.nodes[0].SetActive(true);
+                //nodeManager.nodes[0].SetActive(true);
             } //reset
             else if(leftSelectedNodeIndex != -1 || rightSelectedNodeIndex != -1 || leftSelectedTargetIndex != -1 || rightSelectedTargetIndex != -1)
             {
@@ -403,7 +403,7 @@ unsafe public class snake : MonoBehaviour {
     }
 
     void DrawMesh(){
-        node_pos = node_1.transform.position; // ???
+        // node_pos = node_1.transform.position; // ???
 
         int triangleIndexCount = getNumTriangles() * 3; 
 

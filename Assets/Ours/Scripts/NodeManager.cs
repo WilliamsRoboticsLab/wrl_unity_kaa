@@ -30,7 +30,7 @@ public class NodeManager : MonoBehaviour
             if(i != nextAvalible) child.gameObject.SetActive(false);
             i++;
         }
-        nextAvalible++;
+        //nextAvalible++;
     }
 
     public bool[] getBools() {

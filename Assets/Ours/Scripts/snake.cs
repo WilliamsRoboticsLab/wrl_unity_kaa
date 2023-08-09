@@ -27,7 +27,7 @@ unsafe public class snake : MonoBehaviour {
     [return: MarshalAs(UnmanagedType.Bool)]
     static public extern bool FreeLibrary(IntPtr hModule);
     IntPtr library;
-    delegate void cpp_init();
+    delegate void cpp_init(bool SHOW_DRAGON = false);
     delegate int cpp_getNumVertices();
     delegate int cpp_getNumTriangles();
     delegate void cpp_reset();

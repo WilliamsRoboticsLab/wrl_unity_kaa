@@ -342,7 +342,10 @@ delegate void cpp_reset() {
 }
 
 delegate void cpp_init(bool _DRAGON_DRIVING = false) {
+    // FORNOW
     DRAGON_DRIVING__SET_IN_CPP_INIT = _DRAGON_DRIVING;
+    if (_DRAGON_DRIVING) DRAGON_SHOW = true;
+
     ASSERT(!initialized);
     initialized = true;
 
@@ -1111,7 +1114,7 @@ void jones() {
 //END CARL
 
 void kaa() {
-    cpp_init();
+    cpp_init(true);
     SPOOF_reset();
 
     UnityVertexAttributeFloat *SPOOF_vertex_positions = (UnityVertexAttributeFloat *) calloc(LEN_X, sizeof(UnityVertexAttributeFloat));
@@ -1221,20 +1224,6 @@ void kaa() {
                 }
             }
 
-            { // ceiling
-                real r = 0.3;
-                eso_begin(PV, (tabs % 3 == 0) ? SOUP_QUADS : SOUP_OUTLINED_QUADS);
-                if (tabs % 3 == 0) {
-                    eso_color(1.0, 1.0, 1.0, 0.5);
-                } else {
-                    eso_color(0.0, 0.0, 0.0, 0.5);
-                }
-                eso_vertex( r, 0.0,  r);
-                eso_vertex( r, 0.0, -r);
-                eso_vertex(-r, 0.0, -r);
-                eso_vertex(-r, 0.0,  r);
-                eso_end();
-            }
         }
 
         { // widget
@@ -1273,6 +1262,21 @@ void kaa() {
                     SPOOF_targetPositions[featurePointIndex] = castRayResult.intersection_position;
                 }
             }
+        }
+
+        { // ceiling
+            real r = 0.3;
+            eso_begin(PV, (tabs % 3 == 0) ? SOUP_QUADS : SOUP_OUTLINED_QUADS);
+            if (tabs % 3 == 0) {
+                eso_color(1.0, 1.0, 1.0, 0.5);
+            } else {
+                eso_color(0.0, 0.0, 0.0, 0.5);
+            }
+            eso_vertex( r, 0.0,  r);
+            eso_vertex( r, 0.0, -r);
+            eso_vertex(-r, 0.0, -r);
+            eso_vertex(-r, 0.0,  r);
+            eso_end();
         }
 
 

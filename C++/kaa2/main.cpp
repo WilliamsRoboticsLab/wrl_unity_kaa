@@ -470,8 +470,8 @@ delegate void cpp_init() {
             strcpy(bodyPath, pwd);
 
             #ifdef JIM_DLL
-            strcat(headPath, "\\Assets\\_Objects\\_dragonHead.obj");
-            strcat(bodyPath, "\\Assets\\_Objects\\dragonBody.obj");
+            strcat(headPath, "\\Assets\\_Objects\\head.obj");
+            strcat(bodyPath, "\\Assets\\_Objects\\body.obj");
             #else
             strcat(headPath, "\\dragon_head.obj");
             strcat(bodyPath, "\\dragon_body.obj");

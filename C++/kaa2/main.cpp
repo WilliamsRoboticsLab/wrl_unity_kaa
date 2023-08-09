@@ -342,7 +342,7 @@ delegate void cpp_reset() {
 }
 
 
-bool RUNNING_ON_UNITY;
+bool HACK_RUNNING_ON_UNITY;
 
 delegate void cpp_init(bool _DRAGON_DRIVING = false) {
     // FORNOW
@@ -350,8 +350,9 @@ delegate void cpp_init(bool _DRAGON_DRIVING = false) {
     if (_DRAGON_DRIVING) {
         DRAGON_SHOW = true;
         if (!COW0._cow_initialized) {
-            RUNNING_ON_UNITY = true;
+            HACK_RUNNING_ON_UNITY = true;
             _cow_init();
+            _cow_reset();
         }
     }
 
@@ -561,7 +562,7 @@ delegate bool cpp_castRay(
     vec3 ray_direction = { ray_direction_x, ray_direction_y, ray_direction_z };
     IntersectionResult result; {
         if (DRAGON_DRIVING__SET_IN_CPP_INIT) {
-            if (RUNNING_ON_UNITY) cow_begin_frame();
+            if (HACK_RUNNING_ON_UNITY) cow_begin_frame();
             result = GPU_pick(ray_origin, ray_direction, &dragonBody);
         } else {
             result = ray_mesh_intersection(ray_origin, ray_direction, currentState.x, sim.num_triangles, sim.triangle_indices);
@@ -1329,5 +1330,6 @@ void main() {
     APPS {
         // APP(jones);
         APP(kaa);
+        // APP(eg_fbo);
     }
 }

@@ -353,6 +353,7 @@ delegate void cpp_init(bool _DRAGON_DRIVING = false) {
             HACK_RUNNING_ON_UNITY = true;
             _cow_init();
             _cow_reset();
+            eg_fbo();
         }
     }
 

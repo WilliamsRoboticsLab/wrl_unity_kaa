@@ -843,7 +843,7 @@ unsafe public class DragonMeshManager {
                 bodyBones[boneIndex] = new GameObject("Bone " + boneIndex.ToString()).transform;
                 bodyBones[boneIndex].parent = dragon_object.transform;
                 bodyBones[boneIndex].localPosition = bodyBones_o[boneIndex];
-                bodyBones[boneIndex].localRotation = Quaternion.LookRotation(bodyBones_z[boneIndex], bodyBones_y[boneIndex]);
+                bodyBones[boneIndex].localRotation = Quaternion.identity; // Quaternion.LookRotation(bodyBones_z[boneIndex], bodyBones_y[boneIndex]);
                 bindPoses[boneIndex] = Matrix4x4.identity;// bones[boneIndex].worldToLocalMatrix * transform.localToWorldMatrix;
             }
             bodyRend.sharedMesh.bindposes = bindPoses;

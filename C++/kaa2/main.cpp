@@ -531,6 +531,7 @@ delegate void cpp_init(bool _DRAGON_DRIVING = false) {
 
                 dragonBody.bone_indices[vertex_i] = { i, j, k };
                 dragonBody.bone_weights[vertex_i] = { f(i), f(j), f(k) };
+                dragonBody.bone_weights[vertex_i] /= sum(dragonBody.bone_weights[vertex_i]);
 
                 jim_sort_against(
                         (int *) &dragonBody.bone_indices[vertex_i],
@@ -551,7 +552,9 @@ delegate void cpp_init(bool _DRAGON_DRIVING = false) {
                     dragonBody.bone_weights[vertex_i][0],
                 };
 
-                dragonBody.bone_weights[vertex_i] /= sum(dragonBody.bone_weights[vertex_i]);
+                ASSERT(dragonBody.bone_weights[vertex_i][0] >= dragonBody.bone_weights[vertex_i][1]);
+                ASSERT(dragonBody.bone_weights[vertex_i][1] >= dragonBody.bone_weights[vertex_i][2]);
+                ASSERT(dragonBody.bone_weights[vertex_i][2] >= dragonBody.bone_weights[vertex_i][3]);
             }
         }
     }

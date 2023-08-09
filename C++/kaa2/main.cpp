@@ -52,7 +52,7 @@ int IK_MAX_LINE_SEARCH_STEPS = 8;
 #include "include.cpp"
 
 bool DRAGON_SHOW = false;
-bool DRAGON_DRIVING = false;
+bool DRAGON_DRIVING__SET_IN_CPP_INIT = false;
 struct IntersectionResult {
     bool hit;
     vec3 p;
@@ -341,7 +341,8 @@ delegate void cpp_reset() {
     currentBones = getBones(currentState.x);
 }
 
-delegate void cpp_init() {
+delegate void cpp_init(bool _DRAGON_DRIVING = false) {
+    DRAGON_DRIVING__SET_IN_CPP_INIT = _DRAGON_DRIVING;
     ASSERT(!initialized);
     initialized = true;
 
@@ -547,7 +548,7 @@ delegate bool cpp_castRay(
     vec3 ray_origin = { ray_origin_x, ray_origin_y, ray_origin_z };
     vec3 ray_direction = { ray_direction_x, ray_direction_y, ray_direction_z };
     IntersectionResult result; {
-        if (DRAGON_DRIVING) {
+        if (DRAGON_DRIVING__SET_IN_CPP_INIT) {
             result = GPU_pick(ray_origin, ray_direction, &dragonBody);
         } else {
             result = ray_mesh_intersection(ray_origin, ray_direction, currentState.x, sim.num_triangles, sim.triangle_indices);
@@ -646,7 +647,7 @@ delegate void cpp_solve(
             } else {
                 real Q = 0.0; {
                     for_(i, MAX_NUM_FEATURE_POINTS) if (targetEnabled[i]) {
-                        vec3 p = (DRAGON_DRIVING) ? skinnedGet(mesh, bones, featurePoints[i]) : get(x, featurePoints[i]);
+                        vec3 p = (DRAGON_DRIVING__SET_IN_CPP_INIT) ? skinnedGet(mesh, bones, featurePoints[i]) : get(x, featurePoints[i]);
                         Q += Q_c * .5 * squaredNorm(p - targetPositions[i]);
                     }
                 }
@@ -696,7 +697,7 @@ delegate void cpp_solve(
                 } else {
                     SDVector dQdu; {
                         SDVector dQdx(LEN_X); {
-                            if (DRAGON_DRIVING) {
+                            if (DRAGON_DRIVING__SET_IN_CPP_INIT) {
                                 SDVector dQds(LEN_S); {
                                     for_(i, MAX_NUM_FEATURE_POINTS) if (targetEnabled[i]) {
                                         vec3 p = skinnedGet(mesh, bones, featurePoints[i]);
@@ -806,7 +807,7 @@ delegate void cpp_solve(
         }
         for_(k, 3 * sim.num_triangles) ((UnityTriangleIndexInt *) triangle_indices__UINT_ARRAY)[k] = (UnityTriangleIndexInt) ((int *) sim.triangle_indices)[k];
         for_(indexOfFeaturePointToSet, num_feature_points) {
-            vec3 tmp = (DRAGON_DRIVING)
+            vec3 tmp = (DRAGON_DRIVING__SET_IN_CPP_INIT)
                 ? skinnedGet(mesh, currentBones, featurePoints[indexOfFeaturePointToSet])
                 : get(currentState.x, featurePoints[indexOfFeaturePointToSet]);
             for_(d, 3) ((float *) feature_point_positions__FLOAT3__ARRAY)[3 * indexOfFeaturePointToSet + d] = float(tmp[d]);

@@ -317,7 +317,7 @@ struct Sim {
                     }
                 };
 
-                PUSH_TRIANGLE(1);
+                PUSH_TRIANGLE(0);
 
                 StretchyBuffer<int2> positivelyOrientedEdgeQueue = {};
 

@@ -51,6 +51,8 @@ int IK_MAX_LINE_SEARCH_STEPS = 8;
 
 
 #include "include.cpp"
+// #include "fbo.cpp"
+
 
 const real ROBOT_SEGMENT_LENGTH = 0.1450;
 const real ROBOT_SEGMENT_RADIUS = 0.06 / 2;
@@ -66,6 +68,7 @@ const int  _MESH_NUMBER_OF_UPPER_NODE_LAYERS_EXCLUSIVE = ROBOT_NUMBER_OF_UPPER_S
 const int  _MESH_NUMBER_OF_LOWER_NODE_LAYERS_EXCLUSIVE = ROBOT_NUMBER_OF_LOWER_SEGMENTS * MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_LOWER_SEGMENT;
 const int  MESH_NUMBER_OF_NODE_LAYERS = 1 + _MESH_NUMBER_OF_UPPER_NODE_LAYERS_EXCLUSIVE + _MESH_NUMBER_OF_LOWER_NODE_LAYERS_EXCLUSIVE + (INCLUDE_DUMMY_SEGMENT ? 1 : 0);
 const int  NUM_BONES = MESH_NUMBER_OF_NODE_LAYERS - 1;
+real FRANCESCO_CLOCK = RAD(30);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -133,7 +136,7 @@ delegate void cpp_dragon_getMesh (
         }
         for_(d, 4) {
             ((UnityVertexAttributeFloat*) vertex_colors)[4 * k + d] = (d == 3) ? (UnityVertexAttributeFloat)(1.0)
-                                                                               : (UnityVertexAttributeFloat)(mesh.vertex_colors[k][d]);
+                : (UnityVertexAttributeFloat)(mesh.vertex_colors[k][d]);
         }
     }
     for (int k = 0; k < cpp_dragon_getNumTriangles(mesh_index); k++) {
@@ -175,9 +178,9 @@ void updateBones() {
 }
 
 delegate void cpp_dragon_yzoBones(
-    void *bones_y,
-    void *bones_z,
-    void *bones_o) {
+        void *bones_y,
+        void *bones_z,
+        void *bones_o) {
 
     updateBones();
 
@@ -250,11 +253,11 @@ void initializeBones() {
 
 
 delegate void cpp_dragon_initializeBones (
-    void *bones_y,
-    void *bones_z,
-    void *bones_o,
-    void *bone_indices,
-    void *bone_weights) {
+        void *bones_y,
+        void *bones_z,
+        void *bones_o,
+        void *bone_indices,
+        void *bone_weights) {
 
     initializeBones();
 
@@ -274,9 +277,9 @@ delegate void cpp_dragon_initializeBones (
 }
 
 delegate void cpp_dragon_yzoHead (
-    void *bones_y,
-    void *bones_z,
-    void *bones_o) {
+        void *bones_y,
+        void *bones_z,
+        void *bones_o) {
 
     vec3 y = -normalized(get(currentState.x, 9 + (NUM_BONES) * 10) - get(currentState.x, 9 + (NUM_BONES - 1) * 10));
     vec3 up = { 0.0, 1.0, 0.0 }; 
@@ -306,8 +309,8 @@ delegate void cpp_getNumViasPerCable(void *cpp_vias) {
 }
 
 delegate void cpp_getCables(
-    void *cpp_cable_positions,
-    void *cpp_tensions) {
+        void *cpp_cable_positions,
+        void *cpp_tensions) {
 
     for (int i = 0; i < sim.num_cable_vias_total; i++) {
         vec3 v = get(currentState.x, sim.vias[i]);
@@ -323,12 +326,12 @@ delegate void cpp_getCables(
 }
 
 /*
-char* UNITY_FILEPATH;
+   char* UNITY_FILEPATH;
 
-delegate void cpp_getUnityFilePath(void* cpp_filePath) {
-    UNITY_FILEPATH = (char*)cpp_filePath;
-}
-*/
+   delegate void cpp_getUnityFilePath(void* cpp_filePath) {
+   UNITY_FILEPATH = (char*)cpp_filePath;
+   }
+ */
 
 // END CARL ///
 
@@ -344,7 +347,6 @@ delegate void cpp_reset() {
 }
 
 delegate void cpp_init() {
-
     ASSERT(!initialized);
     initialized = true;
 
@@ -360,9 +362,11 @@ delegate void cpp_init() {
         StretchyBuffer<vec3> X = {}; {
             real length = 0.0;
             for_(i, MESH_NUMBER_OF_NODE_LAYERS) {
+                real angle = FRANCESCO_CLOCK;
                 for_(a, MESH_NUMBER_OF_ANGULAR_SECTIONS) {
-                    real angle = NUM_DEN(a, MESH_NUMBER_OF_ANGULAR_SECTIONS) * TAU;
-                    sbuff_push_back(&X, V3(ROBOT_SEGMENT_RADIUS * cos(angle), -length, ROBOT_SEGMENT_RADIUS * sin(angle)));
+                    // real angularWidth = RAD(((a % 3) == 2) ? 60 : 30);
+                    sbuff_push_back(&X, V3(ROBOT_SEGMENT_RADIUS * cos(angle), -length, -ROBOT_SEGMENT_RADIUS * sin(angle)));
+                    angle += RAD(((a % 3) == 2) ? 60 : 30);
                 }
                 sbuff_push_back(&X, V3(0.0, -length, 0.0));
                 if (i == MESH_NUMBER_OF_NODE_LAYERS - 1) ASSERT(ARE_EQUAL(length, ROBOT_LENGTH));
@@ -442,6 +446,7 @@ delegate void cpp_init() {
 
         sim.allocAndPrecompute(&simInput);
     }
+
     u_MAX = SDVector(sim.num_cables); {
         for_(j, sim.num_cables) {
             u_MAX[j] = 0.8 * ROBOT_SEGMENT_LENGTH;
@@ -471,7 +476,7 @@ delegate void cpp_init() {
         char bodyPath[256];
         strcpy(headPath, pwd);
         strcpy(bodyPath, pwd);
-        
+
         #ifdef JIM_DLL
         strcat(headPath, "\\Assets\\_Objects\\head.obj");
         strcat(bodyPath, "\\Assets\\_Objects\\body.obj");
@@ -814,9 +819,9 @@ void jones() {
     count = 0;
     while (fgets(data_buffer, _COUNT_OF(data_buffer), fp) != NULL) {
         sscanf(data_buffer, "%lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf",
-               &tendonlengths[0][count], &tendonlengths[1][count], &tendonlengths[2][count], 
-               &tendonlengths[3][count], &tendonlengths[4][count], &tendonlengths[5][count], 
-               &tendonlengths[6][count], &tendonlengths[7][count], &tendonlengths[8][count]);
+                &tendonlengths[0][count], &tendonlengths[1][count], &tendonlengths[2][count], 
+                &tendonlengths[3][count], &tendonlengths[4][count], &tendonlengths[5][count], 
+                &tendonlengths[6][count], &tendonlengths[7][count], &tendonlengths[8][count]);
         for (int i = 0; i < JOSIE_NUM_CABLES; i++) {
             tendonlengths[i][count] = (0.001 * tendonlengths[i][count]);
         }
@@ -882,7 +887,7 @@ void jones() {
             if(robot_draw_mode > 2) {
                 for(int i = robot_draw_mode > 5 ? JOSIE_NUM_RIGID_BODIES - 1: 0; i < JOSIE_NUM_RIGID_BODIES; i++) {
                     soup_draw(PV * Mrobot, SOUP_LINE_STRIP, 1 + time_end - time_start, &(rigidbodies[i][time_start]),
-                              NULL, monokai.red * ((playing && robot_draw_mode != 3) ? 0.5 : 1.0), 10);
+                            NULL, monokai.red * ((playing && robot_draw_mode != 3) ? 0.5 : 1.0), 10);
                 }
             }
 
@@ -934,10 +939,10 @@ void jones() {
                     gui_slider("cable input multiplier", &cable_input_multiplier, 0.5, 3.0);
                 }
                 /**
-                if (gui_button("update cable reference lengths")) {
-                    jonesUpdateCableReferenceLengths();
-                }
-                **/
+                  if (gui_button("update cable reference lengths")) {
+                  jonesUpdateCableReferenceLengths();
+                  }
+                 **/
                 if (gui_button("disable / enable cables", 'c')) currentState.enabled__BIT_FIELD ^= CABLES;
 
                 if(free_sliders){
@@ -982,21 +987,21 @@ void jones() {
             if (kaa_draw_mode == 2) {
                 sim.draw(P * V, &currentState);
                 /**
-                int num_cables = cpp_getNumCables();
-                int total_vias = cpp_getTotalNumVias();
-                int* vias_per_cable = new int[num_cables];
-                float* via_positions = new float[total_vias];
-                float* tensions = new float[num_cables];
+                  int num_cables = cpp_getNumCables();
+                  int total_vias = cpp_getTotalNumVias();
+                  int* vias_per_cable = new int[num_cables];
+                  float* via_positions = new float[total_vias];
+                  float* tensions = new float[num_cables];
 
-                cpp_getNumViasPerCable((void*)vias_per_cable);
-                cpp_getCables(via_positions, tensions);
+                  cpp_getNumViasPerCable((void*)vias_per_cable);
+                  cpp_getCables(via_positions, tensions);
 
-                gui_printf("Num Cables: %d", num_cables);
-                gui_printf("Num Vias: %d", total_vias);
-                for (int i = 0; i < num_cables / 3; i++) {
-                    gui_printf("%d\t%d\t%d", vias_per_cable[3*i], vias_per_cable[3*i+1], vias_per_cable[3*i+2]);
-                }
-                **/
+                  gui_printf("Num Cables: %d", num_cables);
+                  gui_printf("Num Vias: %d", total_vias);
+                  for (int i = 0; i < num_cables / 3; i++) {
+                  gui_printf("%d\t%d\t%d", vias_per_cable[3*i], vias_per_cable[3*i+1], vias_per_cable[3*i+2]);
+                  }
+                 **/
             }
             else if (kaa_draw_mode == 1) {
                 vec3 spine_positions[NUM_BONES+1];
@@ -1007,7 +1012,7 @@ void jones() {
                 soup_draw(PV, SOUP_POINTS, NUM_BONES+1, spine_positions, NULL, monokai.white, 10);
             }
             if (generate_has_run) soup_draw(PV, SOUP_LINE_STRIP, generate_curr_state,
-                generated_positions, NULL, monokai.purple, 10);
+                    generated_positions, NULL, monokai.purple, 10);
         }
     }
 }
@@ -1167,7 +1172,7 @@ void kaa() {
                     vec3 o = get(currentState.x, 9 + (NUM_BONES) * 10);
                     head.draw(P, V, M4_xyzo(x, y, z, o));
                 }
-                
+
 
                 { // body
 
@@ -1236,6 +1241,7 @@ void kaa() {
 void main() {
     omp_set_num_threads(6);
     APPS {
-        APP(jones);
+        // APP(jones);
+        APP(kaa);
     }
 }

@@ -9,3 +9,5 @@
 run.bat
 main.obj
 main.lib
+snake.dll
+snake.lib

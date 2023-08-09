@@ -56,6 +56,7 @@ unsafe public class snake : MonoBehaviour {
         bool pleaseSetFeaturePoint,
         int indexOfFeaturePointToSet,
         void *feature_point_positions__FLOAT3__ARRAY = null);
+    
     cpp_init init;
     cpp_getNumVertices getNumVertices;
     cpp_getNumTriangles getNumTriangles;
@@ -254,7 +255,8 @@ unsafe public class snake : MonoBehaviour {
 
     void Awake () {
         LoadDLL();
-        init();
+        // init();
+        init(true); // TODO
         demos = InitDemos();
         intersection_position = new NativeArray<float>(3, Allocator.Persistent);
         posOnSnake = new NativeArray<float3>(nodeManager.numNodes, Allocator.Persistent);

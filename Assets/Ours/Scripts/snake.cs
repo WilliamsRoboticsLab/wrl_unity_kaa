@@ -256,7 +256,7 @@ unsafe public class snake : MonoBehaviour {
     void Awake () {
         LoadDLL();
         // init();
-        init(true); // TODO
+        init(false); // TODO
         demos = InitDemos();
         intersection_position = new NativeArray<float>(3, Allocator.Persistent);
         posOnSnake = new NativeArray<float3>(nodeManager.numNodes, Allocator.Persistent);

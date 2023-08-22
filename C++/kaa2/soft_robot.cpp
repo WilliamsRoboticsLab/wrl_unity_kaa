@@ -1,7 +1,9 @@
 #include <vector>
 #include "dense.cpp"
 #include "hessian.cpp"
+#ifdef COW_OS_WINDOWS
 #include <omp.h>
+#endif
 
 // FORNOW
 // FORNOW
@@ -420,17 +422,17 @@ struct Sim {
             add(G, I,  __segment); \
             add(G, J, -__segment); \
         } while (0)
-        #define add_I_minus_J_times_I_minus_J(H, I, J, __tmp) do { Mat __block = __tmp; \
-            add(H, I, I,  __block); \
-            add(H, I, J, -__block); \
-            add(H, J, J,  __block); \
-            add(H, J, I, -__block); \
+        #define add_I_minus_J_times_I_minus_J(H, I, J, __tmp) do { Mat _block = __tmp; \
+            add(H, I, I,  _block); \
+            add(H, I, J, -_block); \
+            add(H, J, J,  _block); \
+            add(H, J, I, -_block); \
         } while (0)
-        #define add_I_minus_J_times_M_minus_N(H, I, J, M, N, __tmp) do { Mat __block = __tmp; \
-            add(H, I, M,  __block); \
-            add(H, I, N, -__block); \
-            add(H, J, N,  __block); \
-            add(H, J, M, -__block); \
+        #define add_I_minus_J_times_M_minus_N(H, I, J, M, N, __tmp) do { Mat _block = __tmp; \
+            add(H, I, M,  _block); \
+            add(H, I, N, -_block); \
+            add(H, J, N,  _block); \
+            add(H, J, M, -_block); \
         } while (0)
 
         const SDVector &x     = state->x;
@@ -470,7 +472,6 @@ struct Sim {
             #undef NUM_TETS
             #pragma omp parallel for default(none) shared(blocks_U_xx) schedule(static, 8)
             for_(tet_i, num_tets) {
-                Tet tet = tets[tet_i];
                 const Mat &dXinv = tet_dXinv[tet_i];
                 Mat F = M3(
                         x[3 * tets[tet_i][1] + 0] - x[3 * tets[tet_i][0] + 0],
@@ -722,8 +723,6 @@ struct Sim {
 
     void draw(mat4 P, mat4 V, mat4 M, State *state) {
         const SDVector &x = state->x;
-        mat4 PV = P * V;
-
         if (1) {
             if (state->enabled__BIT_FIELD & TETS) {
                 SDVector vertex_normals = get_vertex_normals(x);

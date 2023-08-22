@@ -13,7 +13,9 @@ typedef double real;
 #define SNAIL_I_SOLEMNLY_SWEAR_I_AM_UP_TO_NO_GOOD
 
 // #include "C:\Users\WRL\Research\CS3XX\include.cpp"
-#include "C:\Users\Jim\Documents\GitHub\CS3XX\include.cpp"
+// #include "C:\Users\Jim\Documents\GitHub\CS3XX\include.cpp"
+#include "/Users/jbern/Desktop/CS3XX/include.cpp"
+
 
 #include "soft_robot.cpp"
 #include "widget.cpp"

@@ -1,27 +1,28 @@
-// TODO: GPU picking
+// // PHYSICAL
+// TODO: switch to 1Ghz baud rate
+// TODO: speedtest motor communication
+// TODO: ? syncwrite
+// TODO: set up test rig with one of the new little motors
+
+// // VIDEO
+// static IndexedTriangleMesh3D add(int num_meshes, IndexedTriangleMesh3D *meshes)
+// operator + for IndexedTriangleMesh3D
+
+// // PAPER
+// TODO: real-world trajectory Figure
+
 // TODO: make line and spheres show up through the transparent mesh as well
-// TODO: see if you can run cow while running an app in VR
 // TODO: floor
 // TODO: revisit the hessian (kim-style SparseMatrix parallel add?)
-// TODO: talking to motors
 // TODO: linear blend skinning in a vertex shader
-//       get space fish back up and running
 // TODO: #define in build.bat for gui stuff
 // TODO: split IK line search between frames
 // TODO: dFdu sparse matrix (why did this fail last time?)
 // TODO: should x be a FixedSizeSelfDestructingArray<vec3>?
-// // (waiting on josie) real-world trajectory Figure
-// play more with sim params
-// play more with ik weights
-// // visualization
-// pipe and sphere widget
-// cable slack visualization
-// // fun
-// ordering juggling clubs
+// TODO: play more with sim params
+// TODO: play more with ik weights
 // // cow
 // port MIN, MAX, etc. to be functions
-
-
 
 
 
@@ -132,7 +133,11 @@ Via featurePoints[MAX_NUM_FEATURE_POINTS];
 
 ////////////////////////////////////////////////////////////////////////////////
 
+#ifdef COW_OS_WINDOWS
 #define DLL_EXPORT extern "C" __declspec(dllexport)
+#else
+#define DLL_EXPORT 
+#endif
 #define delegate DLL_EXPORT
 typedef float    UnityVertexAttributeFloat;
 typedef int      UnityTriangleIndexInt;
@@ -471,7 +476,8 @@ delegate void cpp_init(bool _DRAGON_DRIVING = false) {
     { // set up skinned mesh
         { //CARL load meshes
             char pwd[256];
-            GetCurrentDirectory(_COUNT_OF(pwd), pwd);
+            /* GetCurrentDirectory(_COUNT_OF(pwd), pwd); */
+            getcwd(pwd, _COUNT_OF(pwd));
             // printf("\n\n");
             // printf(pwd);
             // printf("\n");
@@ -487,11 +493,11 @@ delegate void cpp_init(bool _DRAGON_DRIVING = false) {
             strcat(headPath, "\\Assets\\_Objects\\head.obj");
             strcat(bodyPath, "\\Assets\\_Objects\\body.obj");
             #else
-            strcat(headPath, "\\dragon_head.obj");
-            strcat(bodyPath, "\\dragon_body.obj");
+            strcat(headPath, "/dragon_head.obj");
+            strcat(bodyPath, "/dragon_body.obj");
             #endif
 
-            // printf("HeadPath: %s", headPath);
+            printf("headPath: %s", headPath);
             // printf("\n");
 
             _dragonHead = _meshutil_indexed_triangle_mesh_load(headPath, false, true, false);
@@ -707,7 +713,7 @@ delegate void cpp_solve(
                 }
 
                 real result = Q + R + S;
-                if (_isnan(result)) { result = INFINITY; }
+                if (isnan(result)) { result = INFINITY; }
                 return result;
             }
         };
@@ -816,7 +822,7 @@ delegate void cpp_solve(
                     }
 
                     for_(j, LEN_U) dOdu[j] = dQdu[j] + dRdu[j] + dSdu[j];
-                    for_(j, LEN_U) if (_isnan(dOdu[j])) dOdu[j] = 0; // FORNOW
+                    for_(j, LEN_U) if (isnan(dOdu[j])) dOdu[j] = 0; // FORNOW
                 }
             }
             {
@@ -1165,9 +1171,6 @@ void kaa() {
         mat4 V = camera_get_V(&camera);
         mat4 PV = P * V;
 
-
-        auto draw_sphere = [&](vec3 s, vec3 color = monokai.white) { library.meshes.sphere.draw(P, V, M4_Translation(s) * M4_Scaling(0.01), color); };
-
         struct CastRayResult {
             bool intersects;
             vec3 intersection_position;
@@ -1349,11 +1352,14 @@ void kaa() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void main() {
+int main() {
+    #ifdef COW_OS_WINDOWS
     omp_set_num_threads(6);
+    #endif
     APPS {
         // APP(jones);
         APP(kaa);
         // APP(eg_fbo);
     }
+    return 0;
 }

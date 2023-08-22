@@ -178,7 +178,6 @@ void eg_fbo() {
         camera_move(&camera);
         mat4 P = camera_get_P(&camera);
         mat4 V = camera_get_V(&camera);
-        mat4 PV = P * V;
         static bool paused;
         gui_checkbox("paused", &paused, 'p');
         if (!paused) time += 0.0167;

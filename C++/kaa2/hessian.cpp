@@ -20,8 +20,6 @@ struct Hessian {
             ASSERT(numAdded < FORNOW_NUM_SLOTS);
             ASSERT(i >= j);
 
-            std::pair<int, int> ij = std::make_pair(i, j);
-
             if (numAdded < maxNumAdded) {
 
                 array[indices[numAdded]].val += value;

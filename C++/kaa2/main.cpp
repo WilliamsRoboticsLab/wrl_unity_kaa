@@ -156,41 +156,58 @@ bool initialized;
 
 /// BEGIN CARL ///
 
-#define HEAD 0
-#define BODY 1
-
 IndexedTriangleMesh3D dragon;
 typedef FixedSizeSelfDestructingArray<mat4> Bones;
-const int DRAGON_NUM_BONES = MESH_NUMBER_OF_NODE_LAYERS - 1;
-vec3 boneOriginsRest[DRAGON_NUM_BONES + 1]; // ? okay FORNOW
+
+/* BONES LAYOUT
+ * body
+ * body
+ * body
+ * body
+ * body
+ * body
+ * head
+ *
+ */
+
+const int DRAGON_BODY_NUM_BONES = MESH_NUMBER_OF_NODE_LAYERS - 1;
+const int DRAGON_HEAD_NUM_BONES = 1;
+
+const int DRAGON_NUM_BONES = DRAGON_BODY_NUM_BONES + DRAGON_HEAD_NUM_BONES;
+vec3 bodyBoneOriginsRest[DRAGON_BODY_NUM_BONES + 1]; // ? okay FORNOW
 Bones getBones(SDVector &x) {
     Bones result(DRAGON_NUM_BONES);
-    vec3 boneOrigins[DRAGON_NUM_BONES + 1];
-    vec3 boneNegativeYAxis[DRAGON_NUM_BONES];
-    vec3 bonePositiveXAxis[DRAGON_NUM_BONES];
-    {
-        vec3 boneXAxisFeaturePoint[DRAGON_NUM_BONES + 1]; {
-            for_(j, _COUNT_OF(boneOrigins)) {
-                boneOrigins              [j] = get(x, 9 + j * 10);
-                boneXAxisFeaturePoint    [j] = get(x, 0 + j * 10);
+    { // body
+        vec3 bodyBoneOrigins[DRAGON_BODY_NUM_BONES + 1];
+        vec3 bodyBoneNegativeYAxis[DRAGON_BODY_NUM_BONES];
+        vec3 bodyBonePositiveXAxis[DRAGON_BODY_NUM_BONES];
+        {
+            vec3 bodyBoneXAxisFeaturePoint[DRAGON_BODY_NUM_BONES + 1]; {
+                for_(j, _COUNT_OF(bodyBoneOrigins)) {
+                    bodyBoneOrigins              [j] = get(x, 9 + j * 10);
+                    bodyBoneXAxisFeaturePoint    [j] = get(x, 0 + j * 10);
+                }
+            }
+            {
+                for_(j, _COUNT_OF(bodyBoneNegativeYAxis)) {
+                    bodyBoneNegativeYAxis[j] = normalized(bodyBoneOrigins[j + 1] - bodyBoneOrigins[j]);
+                    bodyBonePositiveXAxis[j] = normalized(bodyBoneXAxisFeaturePoint[j] - bodyBoneOrigins[j]);
+                }
             }
         }
         {
-            for_(j, _COUNT_OF(boneNegativeYAxis)) {
-                boneNegativeYAxis[j] = normalized(boneOrigins[j + 1] - boneOrigins[j]);
-                bonePositiveXAxis[j] = normalized(boneXAxisFeaturePoint[j] - boneOrigins[j]);
+            for_(bone_i, DRAGON_BODY_NUM_BONES) {
+                vec3 y_hat = -bodyBoneNegativeYAxis[bone_i];
+                vec3 x_hat = bodyBonePositiveXAxis[bone_i];
+                vec3 z_hat = cross(x_hat, y_hat);
+                mat4 invBind = M4_Translation(-bodyBoneOriginsRest[bone_i]);
+                mat4 Bone = M4_xyzo(x_hat, y_hat, z_hat, bodyBoneOrigins[bone_i]);
+                result[bone_i] = Bone * invBind;
             }
         }
     }
-    {
-        for_(bone_i, DRAGON_NUM_BONES) {
-            vec3 y_hat = -boneNegativeYAxis[bone_i];
-            vec3 x_hat = bonePositiveXAxis[bone_i];
-            vec3 z_hat = cross(x_hat, y_hat);
-            mat4 invBind = M4_Translation(-boneOriginsRest[bone_i]);
-            mat4 Bone = M4_xyzo(x_hat, y_hat, z_hat, boneOrigins[bone_i]);
-            result[bone_i] = Bone * invBind;
-        }
+    { // head
+        result[DRAGON_BODY_NUM_BONES] = M4_Identity();
     }
     return result;
 }
@@ -511,25 +528,37 @@ delegate void cpp_init(bool _DRAGON_DRIVING = false) {
         }
 
         { // create bones in mesh
-            _dragonBody.num_bones = DRAGON_NUM_BONES;
-            _dragonBody.bones = (mat4 *) malloc(DRAGON_NUM_BONES * sizeof(mat4));
-            _dragonBody.bone_indices = (int4 *) malloc(_dragonBody.num_vertices * sizeof(int4));
-            _dragonBody.bone_weights = (vec4 *) malloc(_dragonBody.num_vertices * sizeof(vec4));
-        }
-
-        { // set bones rest positions
-            for_(j, _COUNT_OF(boneOriginsRest)) {
-                boneOriginsRest[j] = get(sim.x_rest, 9 + j * 10);
+            { // body
+                _dragonBody.num_bones = DRAGON_BODY_NUM_BONES;
+                _dragonBody.bones = (mat4 *) malloc(_dragonBody.num_bones * sizeof(mat4));
+                _dragonBody.bone_indices = (int4 *) malloc(_dragonBody.num_vertices * sizeof(int4));
+                _dragonBody.bone_weights = (vec4 *) malloc(_dragonBody.num_vertices * sizeof(vec4));
+            }
+            { // head
+                _dragonHead.num_bones = DRAGON_HEAD_NUM_BONES;
+                _dragonHead.bones = (mat4 *) malloc(_dragonHead.num_bones * sizeof(mat4));
+                _dragonHead.bone_indices = (int4 *) malloc(_dragonHead.num_vertices * sizeof(int4));
+                _dragonHead.bone_weights = (vec4 *) malloc(_dragonHead.num_vertices * sizeof(vec4));
             }
         }
 
-        { // assign weights
+
+        { // assign indices and weights
             { // head
+                for_(i, _dragonHead.num_vertices) {
+                    _dragonHead.bone_indices[i] = { 0 };  
+                    _dragonHead.bone_weights[i] = { 1.0 };  
+                }
             }
             { // body
+                { // set bones rest positions (body only)
+                    for_(j, _COUNT_OF(bodyBoneOriginsRest)) {
+                        bodyBoneOriginsRest[j] = get(sim.x_rest, 9 + j * 10);
+                    }
+                }
                 for_(vertex_i, _dragonBody.num_vertices) {
                     auto f = [&](int i) {
-                        real c = AVG(boneOriginsRest[i].y, boneOriginsRest[i + 1].y);
+                        real c = AVG(bodyBoneOriginsRest[i].y, bodyBoneOriginsRest[i + 1].y);
                         real D = ABS(_dragonBody.vertex_positions[vertex_i].y - c);
                         return MAX(0.0, (1.0 / D) - 10.0);
                     };
@@ -570,7 +599,7 @@ delegate void cpp_init(bool _DRAGON_DRIVING = false) {
                 }
             }
         }
-        dragon = _dragonBody;
+        dragon = _dragonBody + _dragonHead;
     }
 
 
@@ -769,7 +798,7 @@ delegate void cpp_solve(
                                                 }
                                             }
                                             { // X FORNOW SO HACKY
-                                                for_(bone_i, DRAGON_NUM_BONES + 1) {
+                                                for_(bone_i, DRAGON_BODY_NUM_BONES + 1) {
                                                     sbuff_push_back(&X_node_indices, 9 + bone_i * 10);
                                                     sbuff_push_back(&X_node_indices, 0 + bone_i * 10);
                                                 }

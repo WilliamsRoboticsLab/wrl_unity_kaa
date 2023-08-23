@@ -530,13 +530,13 @@ delegate void cpp_init(bool _DRAGON_DRIVING = false) {
         { // create bones in mesh
             { // body
                 _dragonBody.num_bones = DRAGON_BODY_NUM_BONES;
-                _dragonBody.bones = (mat4 *) malloc(_dragonBody.num_bones * sizeof(mat4));
+                _dragonBody.bones        = (mat4 *) malloc(_dragonBody.num_bones    * sizeof(mat4));
                 _dragonBody.bone_indices = (int4 *) malloc(_dragonBody.num_vertices * sizeof(int4));
                 _dragonBody.bone_weights = (vec4 *) malloc(_dragonBody.num_vertices * sizeof(vec4));
             }
             { // head
                 _dragonHead.num_bones = DRAGON_HEAD_NUM_BONES;
-                _dragonHead.bones = (mat4 *) malloc(_dragonHead.num_bones * sizeof(mat4));
+                _dragonHead.bones        = (mat4 *) malloc(_dragonHead.num_bones    * sizeof(mat4));
                 _dragonHead.bone_indices = (int4 *) malloc(_dragonHead.num_vertices * sizeof(int4));
                 _dragonHead.bone_weights = (vec4 *) malloc(_dragonHead.num_vertices * sizeof(vec4));
             }
@@ -544,12 +544,6 @@ delegate void cpp_init(bool _DRAGON_DRIVING = false) {
 
 
         { // assign indices and weights
-            { // head
-                for_(i, _dragonHead.num_vertices) {
-                    _dragonHead.bone_indices[i] = { 0 };  
-                    _dragonHead.bone_weights[i] = { 1.0 };  
-                }
-            }
             { // body
                 { // set bones rest positions (body only)
                     for_(j, _COUNT_OF(bodyBoneOriginsRest)) {
@@ -596,6 +590,12 @@ delegate void cpp_init(bool _DRAGON_DRIVING = false) {
                     ASSERT(_dragonBody.bone_weights[vertex_i][0] >= _dragonBody.bone_weights[vertex_i][1]);
                     ASSERT(_dragonBody.bone_weights[vertex_i][1] >= _dragonBody.bone_weights[vertex_i][2]);
                     ASSERT(_dragonBody.bone_weights[vertex_i][2] >= _dragonBody.bone_weights[vertex_i][3]);
+                }
+            }
+            { // head
+                for_(i, _dragonHead.num_vertices) {
+                    _dragonHead.bone_indices[i] = { 0 };  
+                    _dragonHead.bone_weights[i] = { 1.0 };  
                 }
             }
         }

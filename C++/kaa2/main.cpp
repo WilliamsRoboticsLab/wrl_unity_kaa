@@ -5,7 +5,9 @@
 // TODO: set up test rig with one of the new little motors
 
 // // VIDEO
-// TODO: eyeballs
+// TODO: eyes (clamped slerp)
+// TODO: arms
+// TODO: wings
 //
 
 // // PAPER
@@ -17,7 +19,7 @@
 // TODO: linear blend skinning in a vertex shader
 // TODO: #define in build.bat for gui stuff
 // TODO: split IK line search between frames
-// TODO: dFdu sparse matrix (why did this fail last time?)
+// TODO: dFdu sparse matrix (why did this fail last animationTime?)
 // TODO: should x be a FixedSizeSelfDestructingArray<vec3>?
 // TODO: play more with sim params
 // TODO: play more with ik weights
@@ -51,6 +53,8 @@ const bool  INCLUDE_DUMMY_SEGMENT                             = false; // FORNOW
 int IK_MAX_LINE_SEARCH_STEPS = 8;
 
 #include "include.cpp"
+
+real animationTime; // FORNOW
 
 bool DRAGON_SHOW = false;
 bool DRAGON_DRIVING__SET_IN_CPP_INIT = false;
@@ -170,6 +174,7 @@ typedef FixedSizeSelfDestructingArray<mat4> Bones;
  *
  */
 
+
 const int DRAGON_BODY_NUM_BONES = MESH_NUMBER_OF_NODE_LAYERS - 1;
 const int DRAGON_HEAD_NUM_BONES = 1;
 
@@ -207,13 +212,15 @@ Bones getBones(SDVector &x) {
         }
     }
     { // head
-        // FORNOW: hacky, with few dependencies
+      // FORNOW: hacky, with few dependencies
+
         vec3 y_hat = -normalized(bodyBoneOrigins[DRAGON_BODY_NUM_BONES] - bodyBoneOrigins[DRAGON_BODY_NUM_BONES - 1]);
         vec3 up = { 0.0, 1.0, 0.0 };
         vec3 x_hat = cross(y_hat, up);
         x_hat = IS_ZERO(squaredNorm(x_hat)) ? V3(1.0, 0.0, 0.0) : normalized(x_hat);
         vec3 z_hat = cross(x_hat, y_hat);
-        result[DRAGON_BODY_NUM_BONES] = M4_xyzo(x_hat, y_hat, z_hat, bodyBoneOrigins[DRAGON_BODY_NUM_BONES]);
+        mat4 M = M4_xyzo(x_hat, y_hat, z_hat, bodyBoneOrigins[DRAGON_BODY_NUM_BONES]);
+        result[DRAGON_BODY_NUM_BONES] = M * M4_RotationAboutYAxis(0.2 * sin(4.0 * animationTime));
     }
     return result;
 }
@@ -1007,13 +1014,13 @@ void jones() {
     }
     fclose(fp);
 
-    int time_start              = 0;
-    int time_end                = JOSIE_NUM_FRAMES - 1;
+    int animationTime_start              = 0;
+    int animationTime_end                = JOSIE_NUM_FRAMES - 1;
     bool playing                = false;
     bool generating             = false;
     bool generate_has_run       = false;
     int generate_curr_state     = -1;
-    real generate_time          = 0.0;
+    real generate_animationTime          = 0.0;
     bool free_sliders           = false;
     int robot_state             = 0;
     int robot_angle             = 170;
@@ -1043,28 +1050,28 @@ void jones() {
             gui_slider("Draw Mode", &robot_draw_mode, 0, 9, 'n', 'm', true);
 
             if (playing) {
-                time_end++;
-                if (time_end >= JOSIE_NUM_FRAMES) time_end = 0;
+                animationTime_end++;
+                if (animationTime_end >= JOSIE_NUM_FRAMES) animationTime_end = 0;
 
-                gui_slider("Time start", &time_start, 0, JOSIE_NUM_FRAMES, 't', 'y');
-                gui_printf("Time end %d", time_end);
-                if (time_start > time_end) time_start = time_end;
+                gui_slider("Time start", &animationTime_start, 0, JOSIE_NUM_FRAMES, 't', 'y');
+                gui_printf("Time end %d", animationTime_end);
+                if (animationTime_start > animationTime_end) animationTime_start = animationTime_end;
             }
             else {
-                gui_slider("Time start", &time_start, 0, JOSIE_NUM_FRAMES, 't', 'y');
-                if (time_start > time_end) time_end = time_start;
-                gui_slider("Time end", &time_end, 0, JOSIE_NUM_FRAMES, 'g','h');
-                if (time_start > time_end) time_start = time_end;
+                gui_slider("Time start", &animationTime_start, 0, JOSIE_NUM_FRAMES, 't', 'y');
+                if (animationTime_start > animationTime_end) animationTime_end = animationTime_start;
+                gui_slider("Time end", &animationTime_end, 0, JOSIE_NUM_FRAMES, 'g','h');
+                if (animationTime_start > animationTime_end) animationTime_start = animationTime_end;
             }
 
-            gui_printf("%d frames in range", 1 + time_end - time_start);
+            gui_printf("%d frames in range", 1 + animationTime_end - animationTime_start);
 
             gui_slider("Angle", &robot_angle, 0, 360);
             mat4 Mrobot = M4_RotationAboutYAxis(RAD(robot_angle));
 
             if(robot_draw_mode > 2) {
                 for(int i = robot_draw_mode > 5 ? JOSIE_NUM_RIGID_BODIES - 1: 0; i < JOSIE_NUM_RIGID_BODIES; i++) {
-                    soup_draw(PV * Mrobot, SOUP_LINE_STRIP, 1 + time_end - time_start, &(rigidbodies[i][time_start]),
+                    soup_draw(PV * Mrobot, SOUP_LINE_STRIP, 1 + animationTime_end - animationTime_start, &(rigidbodies[i][animationTime_start]),
                             NULL, monokai.red * ((playing && robot_draw_mode != 3) ? 0.5 : 1.0), 10);
                 }
             }
@@ -1074,19 +1081,19 @@ void jones() {
                 eso_begin(PV * Mrobot, SOUP_LINE_STRIP, 2);
                 eso_color(monokai.white);
                 for(int i = 0; i < JOSIE_NUM_RIGID_BODIES; i++) {
-                    eso_vertex(rigidbodies[i][time_end]);
+                    eso_vertex(rigidbodies[i][animationTime_end]);
                 }
                 eso_end();
                 eso_begin(PV * Mrobot, SOUP_POINTS, 10);
                 if (robot_draw_mode % 3 == 2) {
                     eso_color(monokai.yellow);
                     for(int i = 0; i < JOSIE_NUM_MARKERS; i++) {
-                        eso_vertex(markerpositions[i][time_end]);
+                        eso_vertex(markerpositions[i][animationTime_end]);
                     }
                 }
                 eso_color(monokai.white);
                 for(int i = 0; i < JOSIE_NUM_RIGID_BODIES; i++) {
-                    eso_vertex(rigidbodies[i][time_end]);
+                    eso_vertex(rigidbodies[i][animationTime_end]);
                 }
                 eso_end();
                 glEnable(GL_DEPTH_TEST);
@@ -1101,7 +1108,7 @@ void jones() {
             gui_slider("Draw Mode", &kaa_draw_mode, 0, 3, 'u', 'i', true);
 
             if(!generating) {
-                generate_time = 0.0;
+                generate_animationTime = 0.0;
 
                 gui_checkbox("Free Sliders", &free_sliders);
 
@@ -1140,15 +1147,15 @@ void jones() {
                 }
             }
             else {
-                if (generate_time == 0.0) generate_curr_state = -1;
+                if (generate_animationTime == 0.0) generate_curr_state = -1;
                 generate_has_run = true;
-                if (generate_curr_state != (int)(generate_time/0.5)) {
-                    generated_positions[(int)(generate_time/0.5)] = get(currentState.x, 9 + NUM_BONES * 10);
+                if (generate_curr_state != (int)(generate_animationTime/0.5)) {
+                    generated_positions[(int)(generate_animationTime/0.5)] = get(currentState.x, 9 + NUM_BONES * 10);
                 }
-                generate_curr_state = (int)(generate_time/0.5);
+                generate_curr_state = (int)(generate_animationTime/0.5);
                 gui_printf("Kaa State: %d", generate_curr_state);
                 if (generate_curr_state > JOSIE_NUM_CABLE_POSITIONS) {
-                    generate_time = 0.0;
+                    generate_animationTime = 0.0;
                     generating = false;
                 }
                 else {
@@ -1156,7 +1163,7 @@ void jones() {
                         currentState.u[j] = tendonlengths[j][generate_curr_state] * cable_input_multiplier;
                         gui_printf("u%d: %lf\n", j, tendonlengths[j][generate_curr_state] * cable_input_multiplier);
                     }
-                    generate_time += 0.0167;
+                    generate_animationTime += 0.0167;
                 }
             }
 
@@ -1213,6 +1220,8 @@ void kaa() {
         mat4 P = camera_get_P(&camera);
         mat4 V = camera_get_V(&camera);
         mat4 PV = P * V;
+
+        animationTime += 0.0167; // FORNOW
 
         struct CastRayResult {
             bool intersects;

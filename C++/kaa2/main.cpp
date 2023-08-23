@@ -220,7 +220,10 @@ Bones getBones(SDVector &x) {
         x_hat = IS_ZERO(squaredNorm(x_hat)) ? V3(1.0, 0.0, 0.0) : normalized(x_hat);
         vec3 z_hat = cross(x_hat, y_hat);
         mat4 M = M4_xyzo(x_hat, y_hat, z_hat, bodyBoneOrigins[DRAGON_BODY_NUM_BONES]);
-        result[DRAGON_BODY_NUM_BONES] = M * M4_RotationAboutYAxis(0.2 * sin(4.0 * animationTime));
+        result[DRAGON_BODY_NUM_BONES] = M
+            * M4_RotationAboutYAxis(0.2 * sin(4.0 * animationTime))
+            * M4_RotationAboutXAxis(0.2 * sin(2.0 * animationTime));
+            
     }
     return result;
 }

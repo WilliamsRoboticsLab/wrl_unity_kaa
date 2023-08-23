@@ -5,8 +5,8 @@
 // TODO: set up test rig with one of the new little motors
 
 // // VIDEO
-// static IndexedTriangleMesh3D add(int num_meshes, IndexedTriangleMesh3D *meshes)
-// operator + for IndexedTriangleMesh3D
+// TODO: eyeballs
+//
 
 // // PAPER
 // TODO: real-world trajectory Figure

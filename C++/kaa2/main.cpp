@@ -177,8 +177,8 @@ const int DRAGON_NUM_BONES = DRAGON_BODY_NUM_BONES + DRAGON_HEAD_NUM_BONES;
 vec3 bodyBoneOriginsRest[DRAGON_BODY_NUM_BONES + 1]; // ? okay FORNOW
 Bones getBones(SDVector &x) {
     Bones result(DRAGON_NUM_BONES);
+    vec3 bodyBoneOrigins[DRAGON_BODY_NUM_BONES + 1];
     { // body
-        vec3 bodyBoneOrigins[DRAGON_BODY_NUM_BONES + 1];
         vec3 bodyBoneNegativeYAxis[DRAGON_BODY_NUM_BONES];
         vec3 bodyBonePositiveXAxis[DRAGON_BODY_NUM_BONES];
         {
@@ -207,7 +207,13 @@ Bones getBones(SDVector &x) {
         }
     }
     { // head
-        result[DRAGON_BODY_NUM_BONES] = M4_Identity();
+        // FORNOW: hacky, with few dependencies
+        vec3 y_hat = -normalized(bodyBoneOrigins[DRAGON_BODY_NUM_BONES] - bodyBoneOrigins[DRAGON_BODY_NUM_BONES - 1]);
+        vec3 up = { 0.0, 1.0, 0.0 };
+        vec3 x_hat = cross(y_hat, up);
+        x_hat = IS_ZERO(squaredNorm(x_hat)) ? V3(1.0, 0.0, 0.0) : normalized(x_hat);
+        vec3 z_hat = cross(x_hat, y_hat);
+        result[DRAGON_BODY_NUM_BONES] = M4_xyzo(x_hat, y_hat, z_hat, bodyBoneOrigins[DRAGON_BODY_NUM_BONES]);
     }
     return result;
 }

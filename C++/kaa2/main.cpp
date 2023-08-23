@@ -5,6 +5,11 @@
 // TODO: set up test rig with one of the new little motors
 
 // // VIDEO
+:qa
+
+
+
+
 // TODO: eyes (clamped slerp)
 // TODO: arms
 // TODO: wings

@@ -5,7 +5,6 @@
 // TODO: set up test rig with one of the new little motors
 
 // // VIDEO
-:qa
 
 
 
@@ -518,8 +517,11 @@ delegate void cpp_init(bool _DRAGON_DRIVING = false) {
         IndexedTriangleMesh3D _dragonBody;
         { //CARL load meshes
             char pwd[256];
-            /* GetCurrentDirectory(_COUNT_OF(pwd), pwd); */
+            #ifdef COW_OS_WINDOWS
+            GetCurrentDirectory(_COUNT_OF(pwd), pwd);
+            #else
             getcwd(pwd, _COUNT_OF(pwd));
+            #endif
             // printf("\n\n");
             // printf(pwd);
             // printf("\n");

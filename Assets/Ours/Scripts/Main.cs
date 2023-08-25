@@ -1,26 +1,22 @@
+// // TODO: Widget
+// TODO: move feature point inside of target (they should never be created and destroyed)
+// NOTE: featurePoint and target
 // ???
 // TODO: dragon vis
 // TODO: remove head
+
+// TODO: just sphere cast against targets
 
 using System;
 using System.Collections;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-
+using System.Threading;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
-
+using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Rendering;
-
-using Unity.Mathematics;
-using static Unity.Mathematics.math;
-
-using System.Threading;
-
-// TODO: move feature point inside of target (they should never be created and destroyed)
-// NOTE: featurePoint and target
-
 
 [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
 unsafe public class Main : MonoBehaviour {
@@ -135,6 +131,9 @@ unsafe public class Main : MonoBehaviour {
     }
 
 
+
+    // TODO: get rid of view set (once there's a simple pass through activating and deactivating game objects)
+    // TODO: just have two booleans viewShowDragon, viewShowMemories
     const int VIEW_SNAKE    = 0;
     const int VIEW_CABLES   = 1;
     const int VIEW_ALL      = 2; 
@@ -148,6 +147,7 @@ unsafe public class Main : MonoBehaviour {
         bool showUI = (_view < VIEW_DRAGON);
         bool showDragon = (_view != VIEW_SNAKE && _view != VIEW_CABLES);
         bool showCables = (_view == VIEW_CABLES);
+
         foreach (GameObject featurePoint in featurePointGameObjects) {
             if (featurePoint != null) featurePoint.GetComponent<MeshRenderer>().enabled = showUI;
         }
@@ -163,11 +163,11 @@ unsafe public class Main : MonoBehaviour {
                 }
             }
         }
+
         transform.GetComponent<MeshRenderer>().enabled = !showDragon;
         cablesParentObject.SetActive(showCables);
         dragon_head.transform.GetComponent<SkinnedMeshRenderer>().enabled = showDragon;
         dragon_body.transform.GetComponent<SkinnedMeshRenderer>().enabled = showDragon;
-        room.SetActive(_view == VIEW_MEMORIES);
     }
 
 
@@ -202,6 +202,13 @@ unsafe public class Main : MonoBehaviour {
     }
 
 
+    // // Targets -> Widgets
+
+    // prefabWidget
+
+    // class Widget {
+    //
+    // }
 
     GameObject targetTargetsParentObject;
     int targetNumTargets;
@@ -250,8 +257,7 @@ unsafe public class Main : MonoBehaviour {
     delegate int cpp_getNumTriangles();
     delegate void cpp_reset();
     delegate int cpp_getNumCables();
-    delegate void cpp_getNumViasPerCable(
-            void *num_vias__INT_ARRAY);
+    delegate void cpp_getNumViasPerCable(void *num_vias__INT_ARRAY);
     delegate void cpp_getCables(
             void *cable_positions__FLOAT3_ARRAY,
             void *tensions__FLOAT_ARRAY);
@@ -275,33 +281,34 @@ unsafe public class Main : MonoBehaviour {
             int indexOfFeaturePointToSet,
             void *feature_point_positions__FLOAT3__ARRAY = null);
 
-    cpp_init init;
-    cpp_getNumVertices getNumVertices;
-    cpp_getNumTriangles getNumTriangles;
-    cpp_reset reset;
-    cpp_getNumCables getNumCables;
+    cpp_init               init;
+    cpp_reset              reset;
+    cpp_solve              solve;
+    cpp_castRay            castRay;
+    cpp_getNumVertices     getNumVertices;
+    cpp_getNumTriangles    getNumTriangles;
+    cpp_getNumCables       getNumCables;
     cpp_getNumViasPerCable getNumViasPerCable;
-    cpp_getCables getCables;
-    cpp_solve solve;
-    cpp_castRay castRay;
+    cpp_getCables          getCables;
+
     void LoadDLL() {
         library = LoadLibrary("Assets/snake");
         init               = (cpp_init)               Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_init"),               typeof(cpp_init));
-        getNumVertices     = (cpp_getNumVertices)     Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_getNumVertices"),     typeof(cpp_getNumVertices));
-        getNumTriangles    = (cpp_getNumTriangles)    Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_getNumTriangles"),    typeof(cpp_getNumTriangles));
         reset              = (cpp_reset)              Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_reset"),              typeof(cpp_reset));
         solve              = (cpp_solve)              Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_solve"),              typeof(cpp_solve));
         castRay            = (cpp_castRay)            Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_castRay"),            typeof(cpp_castRay));
+        getNumVertices     = (cpp_getNumVertices)     Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_getNumVertices"),     typeof(cpp_getNumVertices));
+        getNumTriangles    = (cpp_getNumTriangles)    Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_getNumTriangles"),    typeof(cpp_getNumTriangles));
         getNumCables       = (cpp_getNumCables)       Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_getNumCables"),       typeof(cpp_getNumCables));    
         getNumViasPerCable = (cpp_getNumViasPerCable) Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_getNumViasPerCable"), typeof(cpp_getNumViasPerCable));
         getCables          = (cpp_getCables)          Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_getCables"),          typeof(cpp_getCables));
     }
 
+
+
+
     public GameObject leftHand;
     public GameObject rightHand;
-
-
-
 
 
     public GameObject dragon_head;
@@ -312,7 +319,6 @@ unsafe public class Main : MonoBehaviour {
 
 
 
-    GameObject node_1;
     GameObject head;
     GameObject interactionDotRight;
     GameObject interactionDotLeft;
@@ -321,8 +327,6 @@ unsafe public class Main : MonoBehaviour {
     GameObject[][][] cables;
     public GameObject cablesParentObject;
     //int num_cables = 1;
-    public GameObject room;
-    public Vector3 restPos;
 
 
 
@@ -335,7 +339,6 @@ unsafe public class Main : MonoBehaviour {
 
 
 
-    public const float radius = 0.025f;
 
     // Vector3 node_pos;
     Color targetColor;
@@ -429,7 +432,6 @@ unsafe public class Main : MonoBehaviour {
             leftLeaveTarget  = ResetColor( leftTargetTemp,  leftSelectedTargetIndex);
         }
 
-        //mesh gen
         if (state == STATE_TARGET_DRAGGING || state == STATE_NODE_DRAGGING || state == STATE_RELAX) {
             SolveWrapper();
             UpdateCables();
@@ -464,11 +466,9 @@ unsafe public class Main : MonoBehaviour {
                         Destroy(featurePointGameObjects[k]);
                     }
                 }
-                //state = STATE_RELAX;
                 SolveWrapper(); 
                 UpdateCables();
                 state = STATE_START;         
-                //targetGameObjects[0].SetActive(true);
             } else if (leftSelectedNodeIndex != -1 || rightSelectedNodeIndex != -1 || leftSelectedTargetIndex != -1 || rightSelectedTargetIndex != -1) {
                 bool nodeOrTarget = (leftSelectedNodeIndex != -1 || rightSelectedNodeIndex != -1);
                 bool left = nodeOrTarget ? (leftSelectedNodeIndex != -1) : (leftSelectedTargetIndex != -1);
@@ -490,22 +490,21 @@ unsafe public class Main : MonoBehaviour {
                 }
                 //else state = nodeOrTarget ? STATE_RELAX : STATE_STATIC;
             } //delete and drag <- I think there is a mistake here that is keeping it in relaxing mode when should be static
+
             if(inputPressedLeftStick || Input.GetKeyDown("n")) { ViewCycle(); }
+
             if(leftEnteredTarget || rightEnteredTarget) {
                 UnityEngine.XR.InputDevices.GetDeviceAtXRNode(leftEnteredTarget ? UnityEngine.XR.XRNode.LeftHand : UnityEngine.XR.XRNode.RightHand).SendHapticImpulse(0, 0.3f, 0.15f);
-            } //haptic feedback
-            if(leftSelectedTargetIndex != -1 || rightSelectedTargetIndex != -1)
-            { 
-                //Color newColor = new Color(targetColor.r, targetColor.g, targetColor.b, targetColor.a * 0.7f);
+            }
+
+            if(leftSelectedTargetIndex != -1 || rightSelectedTargetIndex != -1) { 
                 featurePointGameObjects[leftSelectedTargetIndex != -1 ? leftSelectedTargetIndex : rightSelectedTargetIndex].transform.GetComponent<MeshRenderer>().material.SetColor("_Color", Color.blue);
-            } //change color slightly <- come back to 
+            }
 
         }
-        //clamp position
     }
 
     void SolveWrapper(){
-        // node_pos = node_1.transform.position; // ???
 
         int triangleIndexCount = getNumTriangles() * 3; 
 
@@ -654,6 +653,7 @@ unsafe public class Main : MonoBehaviour {
     }
 
     int SphereCast(Vector3 origin, Vector3 direction, bool nodeOrTarget) {
+        float radius = 0.025f;
         int indexToReturn = -1;
         for (int index = 0; index < (nodeOrTarget ? targetGameObjects.Length : (targetNumTargets)); ++index) {
             GameObject target = nodeOrTarget ? targetGameObjects[index] : featurePointGameObjects[index];
@@ -775,16 +775,13 @@ unsafe public class DragonMeshManager {
 
     private GameObject head;
     private GameObject body;
-
     const int HEAD = 0;
     const int BODY = 1;
-
     SkinnedMeshRenderer bodyRend;
     NativeArray<Vector3> bodyBones_y;
     NativeArray<Vector3> bodyBones_z;
     NativeArray<Vector3> bodyBones_o;
     Transform[] bodyBones;
-
     // Precondition: head and body gameobjects should have the following components:
     // - skinnedmeshrenderer
     // - material that supports vertex colors
@@ -793,16 +790,13 @@ unsafe public class DragonMeshManager {
         body = b;
         LoadDLL();
     }
-
     ~DragonMeshManager() {
         FreeLibrary(library);
     }
-
     public void SetUpAll() {
         SetUp(HEAD);
         SetUp(BODY);
     }
-
     public void SetUp(int index) {
         GameObject dragon_object = (index == HEAD) ? head : body;
 
@@ -894,12 +888,10 @@ unsafe public class DragonMeshManager {
 
         }
     }
-
     public void UpdateAll() {
         Update(HEAD);
         Update(BODY);
     }
-
     public void Update(int index) {
         if (index == BODY) {
             int num_bones = dragon_getNumBones();

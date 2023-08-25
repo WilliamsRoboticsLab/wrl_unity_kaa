@@ -149,7 +149,7 @@ unsafe public class Main : MonoBehaviour {
         foreach (GameObject featurePoint in featurePoints) {
             if (featurePoint != null) featurePoint.GetComponent<MeshRenderer>().enabled = showUI;
         }
-        foreach (GameObject target in targetManager.targetGameObjects) {
+        foreach (GameObject target in targetGameObjects) {
             if (target != null) {
                 target.GetComponent<MeshRenderer>().enabled = showUI;
                 foreach(Transform child in target.transform) {
@@ -170,18 +170,6 @@ unsafe public class Main : MonoBehaviour {
 
 
 
-    void InstantiateFeaturePoint(Vector3 position) {
-        GameObject featurePoint = Instantiate(targetPrefab, position, Quaternion.identity);
-        featurePoints[targetManager.targetNumTargets] = featurePoint;
-        targetManager.CreateNode(position);
-        foreach(Transform child in targetManager.targetGameObjects[targetManager.targetNumTargets-1].transform) {
-            if(child.name == "Lines") {
-                foreach(Transform child2 in child){
-                    child2.GetComponent<LinePos>().head = featurePoint;
-                }
-            }
-        }
-    }
 
 
 
@@ -200,10 +188,35 @@ unsafe public class Main : MonoBehaviour {
 
 
 
-    public TargetManager targetManager;
+    public GameObject targetTargetsParentObject;
+    public int targetNumTargets;
+    public int targetMaxNumberOfTargets;
+    public GameObject[] targetGameObjects;
+    void TargetAwake() {
+        targetNumTargets = 0;
+        targetMaxNumberOfTargets = targetTargetsParentObject.transform.childCount;
+        targetGameObjects = new GameObject[targetMaxNumberOfTargets];
+        for (int i = 0; i < targetTargetsParentObject.transform.childCount; ++i) {
+            targetGameObjects[i] = targetTargetsParentObject.transform.GetChild(i).gameObject;
+        }
+    }
+    void TargetSpawn(Vector3 position) {
+        targetGameObjects[targetNumTargets].transform.position = position;
+        targetGameObjects[targetNumTargets].SetActive(true);
+
+        featurePoints[targetNumTargets] = Instantiate(targetPrefab, position, Quaternion.identity);
 
 
+        foreach (Transform child in targetGameObjects[targetNumTargets].transform) {
+            if (child.name == "Lines") {
+                foreach (Transform child2 in child) {
+                    child2.GetComponent<LinePos>().head = featurePoints[targetNumTargets];
+                }
+            }
+        }
 
+        targetNumTargets++;
+    }
 
 
     [DllImport("kernel32", SetLastError = true, CharSet = CharSet.Unicode)]
@@ -333,14 +346,14 @@ unsafe public class Main : MonoBehaviour {
         // init(true);
         init(false);
 
-        targetManager.Setup();
+        TargetAwake();
 
         _nativeIntersectionPosition = new NativeArray<float>(3, Allocator.Persistent);
-        posOnSnake = new NativeArray<float3>(targetManager.targetMaxNumberOfTargets, Allocator.Persistent);
+        posOnSnake = new NativeArray<float3>(targetMaxNumberOfTargets, Allocator.Persistent);
 
 
 
-        featurePoints = new GameObject[targetManager.targetMaxNumberOfTargets];
+        featurePoints = new GameObject[targetMaxNumberOfTargets];
         //featurePoints[0] = head;
         targetColor = targetPrefab.transform.GetComponent<MeshRenderer>().sharedMaterial.GetColor("_Color");
 
@@ -359,8 +372,8 @@ unsafe public class Main : MonoBehaviour {
             state = STATE_TARGET_DRAGGING;
 
             // TODO: CastRayWrapper
-            if (castRay(0.0f, -0.6f, -1.0f, 0.0f, 0.0f, 1.0f, NativeArrayUnsafeUtility.GetUnsafePtr(_nativeIntersectionPosition), true, targetManager.targetNumTargets)) {
-                InstantiateFeaturePoint(new Vector3(_nativeIntersectionPosition[0], _nativeIntersectionPosition[1], _nativeIntersectionPosition[2]));
+            if (castRay(0.0f, -0.6f, -1.0f, 0.0f, 0.0f, 1.0f, NativeArrayUnsafeUtility.GetUnsafePtr(_nativeIntersectionPosition), true, targetNumTargets)) {
+                TargetSpawn(new Vector3(_nativeIntersectionPosition[0], _nativeIntersectionPosition[1], _nativeIntersectionPosition[2]));
             }
         }
     }
@@ -369,10 +382,10 @@ unsafe public class Main : MonoBehaviour {
     void Update () {
         if (JIM_AUTOMATED_TEST) {
             jimTime += 0.0167f;
-            targetManager.targetGameObjects[0].transform.position = new Vector3(
+            targetGameObjects[0].transform.position = new Vector3(
                     0.2f * Mathf.Sin(5 * jimTime),
-                    targetManager.targetGameObjects[0].transform.position.y,
-                    targetManager.targetGameObjects[0].transform.position.z
+                    targetGameObjects[0].transform.position.y,
+                    targetGameObjects[0].transform.position.z
                     );
         }
 
@@ -442,19 +455,19 @@ unsafe public class Main : MonoBehaviour {
             if(inputPressedMenu) state = STATE_STATIC;
             if(inputPressedLeftTrigger || inputPressedRightTrigger) {
                 if (inputPressedLeftTrigger) {
-                    if (castRay(inputLeftRayOrigin.x, inputLeftRayOrigin.y, inputLeftRayOrigin.z, inputLeftRayDirection.x, inputLeftRayDirection.y, inputLeftRayDirection.z, NativeArrayUnsafeUtility.GetUnsafePtr(_nativeIntersectionPosition),  true, targetManager.targetNumTargets)) {
-                        InstantiateFeaturePoint(new Vector3(_nativeIntersectionPosition[0], _nativeIntersectionPosition[1], _nativeIntersectionPosition[2]));
+                    if (castRay(inputLeftRayOrigin.x, inputLeftRayOrigin.y, inputLeftRayOrigin.z, inputLeftRayDirection.x, inputLeftRayDirection.y, inputLeftRayDirection.z, NativeArrayUnsafeUtility.GetUnsafePtr(_nativeIntersectionPosition),  true, targetNumTargets)) {
+                        TargetSpawn(new Vector3(_nativeIntersectionPosition[0], _nativeIntersectionPosition[1], _nativeIntersectionPosition[2]));
                     }
                 }
                 if (inputPressedRightTrigger) {
-                    if (castRay(inputRightRayOrigin.x, inputRightRayOrigin.y, inputRightRayOrigin.z, inputRightRayDirection.x, inputRightRayDirection.y, inputRightRayDirection.z, NativeArrayUnsafeUtility.GetUnsafePtr(_nativeIntersectionPosition), true, targetManager.targetNumTargets)) {
-                        InstantiateFeaturePoint(new Vector3(_nativeIntersectionPosition[0], _nativeIntersectionPosition[1], _nativeIntersectionPosition[2]));
+                    if (castRay(inputRightRayOrigin.x, inputRightRayOrigin.y, inputRightRayOrigin.z, inputRightRayDirection.x, inputRightRayDirection.y, inputRightRayDirection.z, NativeArrayUnsafeUtility.GetUnsafePtr(_nativeIntersectionPosition), true, targetNumTargets)) {
+                        TargetSpawn(new Vector3(_nativeIntersectionPosition[0], _nativeIntersectionPosition[1], _nativeIntersectionPosition[2]));
                     }
                 }
             } else if(inputPressedY || inputPressedB) {
-                targetManager.Setup();
+                TargetAwake();
                 reset();
-                for(int k = 0; k < targetManager.targetMaxNumberOfTargets; k++){
+                for(int k = 0; k < targetMaxNumberOfTargets; k++){
                     if(featurePoints[k] != null) {
                         Destroy(featurePoints[k]);
                     }
@@ -463,20 +476,20 @@ unsafe public class Main : MonoBehaviour {
                 SolveWrapper(); 
                 UpdateCables();
                 state = STATE_START;         
-                //targetManager.targetGameObjects[0].SetActive(true);
+                //targetGameObjects[0].SetActive(true);
             } else if (leftSelectedNodeIndex != -1 || rightSelectedNodeIndex != -1 || leftSelectedTargetIndex != -1 || rightSelectedTargetIndex != -1) {
                 bool nodeOrTarget = (leftSelectedNodeIndex != -1 || rightSelectedNodeIndex != -1);
                 bool left = nodeOrTarget ? (leftSelectedNodeIndex != -1) : (leftSelectedTargetIndex != -1);
                 //delete
                 if (nodeOrTarget && (left ? inputPressedX : inputPressedA)) { 
-                    foreach(Transform child in targetManager.targetGameObjects[left ? leftSelectedNodeIndex : rightSelectedNodeIndex].transform) {
+                    foreach(Transform child in targetGameObjects[left ? leftSelectedNodeIndex : rightSelectedNodeIndex].transform) {
                         if(child.name == "Lines") {
                             foreach(Transform child2 in child){
                                 if(child2.GetComponent<LinePos>().head != null) child2.GetComponent<LinePos>().head.SetActive(false);
                             }
                         }
                     }
-                    targetManager.targetGameObjects[left ? leftSelectedNodeIndex : rightSelectedNodeIndex].SetActive(false);
+                    targetGameObjects[left ? leftSelectedNodeIndex : rightSelectedNodeIndex].SetActive(false);
                     state = STATE_RELAX;
                 } else if (left ? inputPressedLeftGrip : inputPressedRightGrip) {
                     state = nodeOrTarget ? STATE_NODE_DRAGGING : STATE_TARGET_DRAGGING;
@@ -520,20 +533,20 @@ unsafe public class Main : MonoBehaviour {
         }
 
 
-        NativeArray<int> nativeBools = new NativeArray<int>(targetManager.targetMaxNumberOfTargets, Allocator.Temp);
-        NativeArray<float3> nativeTargetPos = new NativeArray<float3>(targetManager.targetMaxNumberOfTargets, Allocator.Temp);
+        NativeArray<int> nativeBools = new NativeArray<int>(targetMaxNumberOfTargets, Allocator.Temp);
+        NativeArray<float3> nativeTargetPos = new NativeArray<float3>(targetMaxNumberOfTargets, Allocator.Temp);
         {
-            for(int k = 0; k < targetManager.targetMaxNumberOfTargets; k++){
-                if (targetManager.isActive(k)) nativeBools[k] = 1;
+            for(int k = 0; k < targetMaxNumberOfTargets; k++){
+                if (targetGameObjects[k].activeSelf) nativeBools[k] = 1;
                 else nativeBools[k] = 0;
-                nativeTargetPos[k] = new float3 (targetManager.targetGameObjects[k].transform.position.x, targetManager.targetGameObjects[k].transform.position.y, targetManager.targetGameObjects[k].transform.position.z);
+                nativeTargetPos[k] = new float3 (targetGameObjects[k].transform.position.x, targetGameObjects[k].transform.position.y, targetGameObjects[k].transform.position.z);
             }
         }
 
         var simulationMeshPositions = (float3 *) NativeArrayUnsafeUtility.GetUnsafePtr(meshData.GetVertexData<float3>(0));
 
         solve(
-                targetManager.targetMaxNumberOfTargets,
+                targetMaxNumberOfTargets,
                 NativeArrayUnsafeUtility.GetUnsafePtr(nativeBools),
                 NativeArrayUnsafeUtility.GetUnsafePtr(nativeTargetPos),
                 simulationMeshPositions,
@@ -545,7 +558,7 @@ unsafe public class Main : MonoBehaviour {
         nativeTargetPos.Dispose();
 
 
-        for(int k = 0; k < targetManager.targetNumTargets; k++){
+        for(int k = 0; k < targetNumTargets; k++){
             featurePoints[k].transform.position = posOnSnake[k];
         }
 
@@ -658,8 +671,8 @@ unsafe public class Main : MonoBehaviour {
 
     int SphereCast(Vector3 origin, Vector3 direction, bool nodeOrTarget) {
         int indexToReturn = -1;
-        for (int index = 0; index < (nodeOrTarget ? targetManager.targetGameObjects.Length : (targetManager.targetNumTargets)); ++index) {
-            GameObject target = nodeOrTarget ? targetManager.targetGameObjects[index] : featurePoints[index];
+        for (int index = 0; index < (nodeOrTarget ? targetGameObjects.Length : (targetNumTargets)); ++index) {
+            GameObject target = nodeOrTarget ? targetGameObjects[index] : featurePoints[index];
             if (!target.activeSelf) { continue; }
 
             Vector3 center = target.transform.position;
@@ -670,7 +683,7 @@ unsafe public class Main : MonoBehaviour {
             float discriminant = half_b * half_b  - a*c;
             if(discriminant > 0) {
                 if (indexToReturn == -1) indexToReturn = index;
-                else if((oc.magnitude < (origin - targetManager.targetGameObjects[indexToReturn].transform.position).magnitude)) indexToReturn = index;
+                else if((oc.magnitude < (origin - targetGameObjects[indexToReturn].transform.position).magnitude)) indexToReturn = index;
             }
             if(nodeOrTarget) Clamp(target);
         }

@@ -2,9 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class LinePos : MonoBehaviour
-{
-
+public class LineRendererWrapper : MonoBehaviour {
     public GameObject ball;
     public Camera mainCam;
     public float lineScale;

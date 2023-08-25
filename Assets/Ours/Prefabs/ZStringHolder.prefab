@@ -10,7 +10,7 @@ GameObject:
   m_Component:
   - component: {fileID: 6022575810775192589}
   m_Layer: 0
-  m_Name: StringHolder
+  m_Name: ZStringHolder
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

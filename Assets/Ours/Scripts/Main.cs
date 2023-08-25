@@ -1,4 +1,3 @@
-// TODO: get auto-running test case set up
 // ???
 // TODO: dragon vis
 // TODO: remove head
@@ -18,6 +17,9 @@ using Unity.Mathematics;
 using static Unity.Mathematics.math;
 
 using System.Threading;
+
+// TODO: move feature point inside of target (they should never be created and destroyed)
+// NOTE: featurePoint and target
 
 
 [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
@@ -146,7 +148,7 @@ unsafe public class Main : MonoBehaviour {
         bool showUI = (_view < VIEW_DRAGON);
         bool showDragon = (_view != VIEW_SNAKE && _view != VIEW_CABLES);
         bool showCables = (_view == VIEW_CABLES);
-        foreach (GameObject featurePoint in featurePoints) {
+        foreach (GameObject featurePoint in featurePointGameObjects) {
             if (featurePoint != null) featurePoint.GetComponent<MeshRenderer>().enabled = showUI;
         }
         foreach (GameObject target in targetGameObjects) {
@@ -162,14 +164,11 @@ unsafe public class Main : MonoBehaviour {
             }
         }
         transform.GetComponent<MeshRenderer>().enabled = !showDragon;
-        stringsContainer.SetActive(showCables);
+        cablesParentObject.SetActive(showCables);
         dragon_head.transform.GetComponent<SkinnedMeshRenderer>().enabled = showDragon;
         dragon_body.transform.GetComponent<SkinnedMeshRenderer>().enabled = showDragon;
         room.SetActive(_view == VIEW_MEMORIES);
     }
-
-
-
 
 
 
@@ -204,28 +203,32 @@ unsafe public class Main : MonoBehaviour {
 
 
 
-    public GameObject targetTargetsParentObject;
-    public int targetNumTargets;
-    public int targetMaxNumberOfTargets;
-    public GameObject[] targetGameObjects;
+    GameObject targetTargetsParentObject;
+    int targetNumTargets;
+    int targetMaxNumberOfTargets;
+    GameObject[] targetGameObjects;
+    GameObject[] featurePointGameObjects;
     void TargetAwake() {
+        targetTargetsParentObject = GameObject.Find("Targets");
         targetNumTargets = 0;
         targetMaxNumberOfTargets = targetTargetsParentObject.transform.childCount;
         targetGameObjects = new GameObject[targetMaxNumberOfTargets];
         for (int i = 0; i < targetTargetsParentObject.transform.childCount; ++i) {
             targetGameObjects[i] = targetTargetsParentObject.transform.GetChild(i).gameObject;
         }
+        featurePointGameObjects = new GameObject[targetMaxNumberOfTargets];
     }
     void TargetSpawn(Vector3 position) {
         targetGameObjects[targetNumTargets].transform.position = position;
         targetGameObjects[targetNumTargets].SetActive(true);
 
-        featurePoints[targetNumTargets] = Instantiate(targetPrefab, position, Quaternion.identity);
+        featurePointGameObjects[targetNumTargets] = Instantiate(prefabFeaturePoint, position, Quaternion.identity);
 
         foreach (Transform child in targetGameObjects[targetNumTargets].transform) {
             if (child.name == "Lines") {
+                child.gameObject.SetActive(true);
                 foreach (Transform child2 in child) {
-                    child2.GetComponent<LinePos>().head = featurePoints[targetNumTargets];
+                    child2.GetComponent<LineRendererWrapper>().head = featurePointGameObjects[targetNumTargets];
                 }
             }
         }
@@ -281,7 +284,6 @@ unsafe public class Main : MonoBehaviour {
     cpp_getCables getCables;
     cpp_solve solve;
     cpp_castRay castRay;
-    //cpp_test test;
     void LoadDLL() {
         library = LoadLibrary("Assets/snake");
         init               = (cpp_init)               Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_init"),               typeof(cpp_init));
@@ -293,7 +295,6 @@ unsafe public class Main : MonoBehaviour {
         getNumCables       = (cpp_getNumCables)       Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_getNumCables"),       typeof(cpp_getNumCables));    
         getNumViasPerCable = (cpp_getNumViasPerCable) Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_getNumViasPerCable"), typeof(cpp_getNumViasPerCable));
         getCables          = (cpp_getCables)          Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_getCables"),          typeof(cpp_getCables));
-        //test            = (cpp_test)            Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_test"),            typeof(cpp_test));
     }
 
     public GameObject leftHand;
@@ -311,23 +312,23 @@ unsafe public class Main : MonoBehaviour {
 
 
 
-    public GameObject node_1;
-    public GameObject head;
-    public GameObject interactionDotRight;
-    public GameObject interactionDotLeft;
-    public GameObject   targetPrefab;
-    public GameObject[] featurePoints;
-    public GameObject cylinderPrefab; 
-    public GameObject   spherePrefab;
-    public GameObject[][][] strings;
-    public GameObject stringsContainer;
+    GameObject node_1;
+    GameObject head;
+    GameObject interactionDotRight;
+    GameObject interactionDotLeft;
+
+
+    GameObject[][][] cables;
+    public GameObject cablesParentObject;
     //int num_cables = 1;
     public GameObject room;
     public Vector3 restPos;
-    public UnityEngine.XR.InputFeatureUsage<float> fl;
 
 
 
+    GameObject prefabFeaturePoint;
+    GameObject prefabCableSphere;
+    GameObject prefabCableCylinder; 
 
 
 
@@ -361,31 +362,36 @@ unsafe public class Main : MonoBehaviour {
         // init(true);
         init(false);
 
+        prefabFeaturePoint = (GameObject) Resources.Load("PrefabFeaturePoint");
+        prefabCableSphere = (GameObject) Resources.Load("PrefabCableSphere");
+        prefabCableCylinder = (GameObject) Resources.Load("PrefabCableCylinder");
+
+        interactionDotLeft = GameObject.Find("InteractionDotLeft");
+        interactionDotLeft.SetActive(false);
+        interactionDotRight = GameObject.Find("InteractionDotRight");
+        interactionDotRight.SetActive(false);
+
         TargetAwake();
+
 
         _castRayIntersectionPosition = new NativeArray<float>(3, Allocator.Persistent);
         posOnSnake = new NativeArray<float3>(targetMaxNumberOfTargets, Allocator.Persistent);
 
 
 
-        featurePoints = new GameObject[targetMaxNumberOfTargets];
-        //featurePoints[0] = head;
-        targetColor = targetPrefab.transform.GetComponent<MeshRenderer>().sharedMaterial.GetColor("_Color");
+        targetColor = prefabFeaturePoint.transform.GetComponent<MeshRenderer>().sharedMaterial.GetColor("_Color");
 
 
         dragonMeshManager = new DragonMeshManager(dragon_head, dragon_body);
         dragonMeshManager.SetUpAll();
-        strings = InitCables();
-        stringsContainer.SetActive(false);
-        //strings[0] = InitCylinderForString(Vector3.zero,Vector3.zero);
+        cables = InitCables();
+        cablesParentObject.SetActive(false);
         SolveWrapper(); 
 
 
         if (JIM_AUTOMATED_TEST) {
             ViewSet(VIEW_CABLES);
-
             state = STATE_TARGET_DRAGGING;
-
             CastRayWrapper(new Vector3(0.0f, -0.6f, -1.0f), new Vector3(0.0f, 0.0f, 1.0f), true);
         }
     }
@@ -432,19 +438,16 @@ unsafe public class Main : MonoBehaviour {
         dragonMeshManager.UpdateAll();
 
         { //interaction dots
-            //left cast
-            if (CastRayWrapper(inputLeftRayOrigin, inputLeftRayDirection, false)) {
-                interactionDotLeft.SetActive(true);
-                interactionDotLeft.transform.position = new Vector3(_castRayIntersectionPosition[0], _castRayIntersectionPosition[1], _castRayIntersectionPosition[2]);
-            } else {
-                interactionDotLeft.SetActive(false);
+            {
+                bool hit = CastRayWrapper(inputLeftRayOrigin, inputLeftRayDirection, false);
+                interactionDotLeft.SetActive(hit);
+                if (hit) { interactionDotLeft.transform.position = new Vector3(_castRayIntersectionPosition[0], _castRayIntersectionPosition[1], _castRayIntersectionPosition[2]); }
             }
 
-            if (CastRayWrapper(inputRightRayOrigin, inputRightRayDirection, false)) {
-                interactionDotRight.SetActive(true);
-                interactionDotRight.transform.position = new Vector3(_castRayIntersectionPosition[0], _castRayIntersectionPosition[1], _castRayIntersectionPosition[2]);
-            } else {
-                interactionDotRight.SetActive(false);
+            {
+                bool hit = CastRayWrapper(inputRightRayOrigin, inputRightRayDirection, false);
+                interactionDotRight.SetActive(hit);
+                if (hit) { interactionDotRight.transform.position = new Vector3(_castRayIntersectionPosition[0], _castRayIntersectionPosition[1], _castRayIntersectionPosition[2]); }
             }
         }
 
@@ -457,8 +460,8 @@ unsafe public class Main : MonoBehaviour {
                 TargetAwake();
                 reset();
                 for(int k = 0; k < targetMaxNumberOfTargets; k++){
-                    if(featurePoints[k] != null) {
-                        Destroy(featurePoints[k]);
+                    if(featurePointGameObjects[k] != null) {
+                        Destroy(featurePointGameObjects[k]);
                     }
                 }
                 //state = STATE_RELAX;
@@ -474,7 +477,7 @@ unsafe public class Main : MonoBehaviour {
                     foreach(Transform child in targetGameObjects[left ? leftSelectedNodeIndex : rightSelectedNodeIndex].transform) {
                         if(child.name == "Lines") {
                             foreach(Transform child2 in child){
-                                if(child2.GetComponent<LinePos>().head != null) child2.GetComponent<LinePos>().head.SetActive(false);
+                                if(child2.GetComponent<LineRendererWrapper>().head != null) child2.GetComponent<LineRendererWrapper>().head.SetActive(false);
                             }
                         }
                     }
@@ -494,7 +497,7 @@ unsafe public class Main : MonoBehaviour {
             if(leftSelectedTargetIndex != -1 || rightSelectedTargetIndex != -1)
             { 
                 //Color newColor = new Color(targetColor.r, targetColor.g, targetColor.b, targetColor.a * 0.7f);
-                featurePoints[leftSelectedTargetIndex != -1 ? leftSelectedTargetIndex : rightSelectedTargetIndex].transform.GetComponent<MeshRenderer>().material.SetColor("_Color", Color.blue);
+                featurePointGameObjects[leftSelectedTargetIndex != -1 ? leftSelectedTargetIndex : rightSelectedTargetIndex].transform.GetComponent<MeshRenderer>().material.SetColor("_Color", Color.blue);
             } //change color slightly <- come back to 
 
         }
@@ -520,7 +523,6 @@ unsafe public class Main : MonoBehaviour {
 
             meshData.SetIndexBufferParams(triangleIndexCount, IndexFormat.UInt32);
         }
-
 
         NativeArray<int> nativeBools = new NativeArray<int>(targetMaxNumberOfTargets, Allocator.Temp);
         NativeArray<float3> nativeTargetPos = new NativeArray<float3>(targetMaxNumberOfTargets, Allocator.Temp);
@@ -548,7 +550,7 @@ unsafe public class Main : MonoBehaviour {
 
 
         for(int k = 0; k < targetNumTargets; k++){
-            featurePoints[k].transform.position = posOnSnake[k];
+            featurePointGameObjects[k].transform.position = posOnSnake[k];
         }
 
 
@@ -568,7 +570,7 @@ unsafe public class Main : MonoBehaviour {
 
     bool ResetColor(int tempIndex, int curIndex){
         if(tempIndex != -1 && curIndex == -1) {
-            featurePoints[tempIndex].transform.GetComponent<MeshRenderer>().material.SetColor("_Color", targetColor);
+            featurePointGameObjects[tempIndex].transform.GetComponent<MeshRenderer>().material.SetColor("_Color", targetColor);
             return true;
         }
         return false;
@@ -608,12 +610,12 @@ unsafe public class Main : MonoBehaviour {
 
     GameObject[] InitCylinderForString(Vector3 startPoint, Vector3 endPoint){
         GameObject[] twoBallsAndACyliner = new GameObject[3];
-        twoBallsAndACyliner[0] = Instantiate<GameObject>(spherePrefab, Vector3.zero, Quaternion.identity, stringsContainer.transform);
-        twoBallsAndACyliner[1] = Instantiate<GameObject>(spherePrefab, Vector3.zero, Quaternion.identity, stringsContainer.transform);
+        twoBallsAndACyliner[0] = Instantiate<GameObject>(prefabCableSphere, Vector3.zero, Quaternion.identity, cablesParentObject.transform);
+        twoBallsAndACyliner[1] = Instantiate<GameObject>(prefabCableSphere, Vector3.zero, Quaternion.identity, cablesParentObject.transform);
         twoBallsAndACyliner[0].transform.position = startPoint;
         twoBallsAndACyliner[1].transform.position =   endPoint;
 
-        twoBallsAndACyliner[2] = Instantiate<GameObject>(cylinderPrefab, Vector3.zero, Quaternion.identity, stringsContainer.transform);
+        twoBallsAndACyliner[2] = Instantiate<GameObject>(prefabCableCylinder, Vector3.zero, Quaternion.identity, cablesParentObject.transform);
         UpdateCylinderForString(startPoint, endPoint, twoBallsAndACyliner);
         return twoBallsAndACyliner;
     }
@@ -626,9 +628,9 @@ unsafe public class Main : MonoBehaviour {
         int viaIndex = 0;
         for(int cableIndex = 0; cableIndex < num_vias.Length; cableIndex++){
             for(int substringIndex = 0; substringIndex < num_vias[cableIndex]-1; substringIndex++){
-                UpdateCylinderForString(cable_positionsV3[viaIndex], cable_positionsV3[viaIndex+1], strings[cableIndex][substringIndex]);
+                UpdateCylinderForString(cable_positionsV3[viaIndex], cable_positionsV3[viaIndex+1], cables[cableIndex][substringIndex]);
                 for(int objectIndex = 0; objectIndex < 3; objectIndex++){
-                    Material mat = strings[cableIndex][substringIndex][objectIndex].GetComponent<MeshRenderer>().material;
+                    Material mat = cables[cableIndex][substringIndex][objectIndex].GetComponent<MeshRenderer>().material;
                     //print(tensions[cableIndex]);
                     mat.color = new Color(tensions[cableIndex]*6.0f, tensions[cableIndex]*6.0f, -tensions[cableIndex]*16.0f+1);
                 }
@@ -651,17 +653,10 @@ unsafe public class Main : MonoBehaviour {
         cylinderAndCaps[2].transform.localScale = localScale;
     }
 
-
-
-
-    public void GenNode(bool leftHandFire, bool rightHandFire) {
-    }
-
-
     int SphereCast(Vector3 origin, Vector3 direction, bool nodeOrTarget) {
         int indexToReturn = -1;
         for (int index = 0; index < (nodeOrTarget ? targetGameObjects.Length : (targetNumTargets)); ++index) {
-            GameObject target = nodeOrTarget ? targetGameObjects[index] : featurePoints[index];
+            GameObject target = nodeOrTarget ? targetGameObjects[index] : featurePointGameObjects[index];
             if (!target.activeSelf) { continue; }
 
             Vector3 center = target.transform.position;

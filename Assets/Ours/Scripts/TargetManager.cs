@@ -1,41 +1,28 @@
 using UnityEngine;
-public class TargetManager : MonoBehaviour {
-    public GameObject nodePrefab;
-    public Vector3 startPos;
-    public float length;
-    public int nextAvalible;
-    public int numNodes;
-    public GameObject[] targets;
 
-    // Start is called before the first frame update
-    void Awake()
-    {
-        //GenerateNode(startPos);
-        Setup();
-    }
+public class TargetManager : MonoBehaviour {
+    public GameObject targetTargetsParentObject;
+    public int targetNumTargets;
+    public int targetMaxNumberOfTargets;
+    public GameObject[] targetGameObjects;
+
 
     public void Setup() {
-        nextAvalible = 0;
-        numNodes = nodePrefab.transform.childCount;
-        targets = new GameObject[numNodes];
-        int i = 0;
-        foreach(Transform child in nodePrefab.transform){
-            targets[i] = child.gameObject;
-            child.position = new Vector3(0.0f, -length+length*i/(float)numNodes, 0.0f);
-            if(i != nextAvalible) child.gameObject.SetActive(false);
-            i++;
+        targetNumTargets = 0;
+        targetMaxNumberOfTargets = targetTargetsParentObject.transform.childCount;
+        targetGameObjects = new GameObject[targetMaxNumberOfTargets];
+        for (int i = 0; i < targetTargetsParentObject.transform.childCount; ++i) {
+            targetGameObjects[i] = targetTargetsParentObject.transform.GetChild(i).gameObject;
         }
-        //nextAvalible++;
     }
 
     public bool isActive (int index) {
-        return targets[index].activeSelf;
+        return targetGameObjects[index].activeSelf;
     }
 
     public void CreateNode(Vector3 position) {
-        targets[nextAvalible].transform.position = position;
-        targets[nextAvalible].SetActive(true);
-        nextAvalible++;
+        targetGameObjects[targetNumTargets].transform.position = position;
+        targetGameObjects[targetNumTargets].SetActive(true);
+        targetNumTargets++;
     }
-
 }

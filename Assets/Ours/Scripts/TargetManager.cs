@@ -1,16 +1,11 @@
-using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
-
-public class NodeManager : MonoBehaviour
-{
-
+public class TargetManager : MonoBehaviour {
     public GameObject nodePrefab;
     public Vector3 startPos;
     public float length;
     public int nextAvalible;
     public int numNodes;
-    public GameObject[] nodes;
+    public GameObject[] targets;
 
     // Start is called before the first frame update
     void Awake()
@@ -22,10 +17,10 @@ public class NodeManager : MonoBehaviour
     public void Setup() {
         nextAvalible = 0;
         numNodes = nodePrefab.transform.childCount;
-        nodes = new GameObject[numNodes];
+        targets = new GameObject[numNodes];
         int i = 0;
         foreach(Transform child in nodePrefab.transform){
-            nodes[i] = child.gameObject;
+            targets[i] = child.gameObject;
             child.position = new Vector3(0.0f, -length+length*i/(float)numNodes, 0.0f);
             if(i != nextAvalible) child.gameObject.SetActive(false);
             i++;
@@ -33,25 +28,14 @@ public class NodeManager : MonoBehaviour
         //nextAvalible++;
     }
 
-    public bool[] getBools() {
-        bool[] bools = new bool[numNodes];
-        for(int index = 0; index < numNodes; index++){
-            bools[index] = nodes[index].activeSelf;
-        }
-        return bools;
+    public bool isActive (int index) {
+        return targets[index].activeSelf;
     }
 
-    public void SetProperties(Vector3 pos) {
-        nodes[nextAvalible].transform.position = pos;
-        nodes[nextAvalible].SetActive(true);
+    public void CreateNode(Vector3 position) {
+        targets[nextAvalible].transform.position = position;
+        targets[nextAvalible].SetActive(true);
         nextAvalible++;
-    }
-
-    public bool AnyActive() {
-        foreach(GameObject node in nodes) {
-            if(node.activeSelf) return true;
-        }
-        return false;
     }
 
 }

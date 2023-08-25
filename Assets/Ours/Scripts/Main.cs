@@ -19,77 +19,13 @@ using static Unity.Mathematics.math;
 
 using System.Threading;
 
-public enum State {NodeDragging, TargetDragging, Relaxing, Starting, Static};
 
 [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
-unsafe public class snake : MonoBehaviour {
-
+unsafe public class Main : MonoBehaviour {
     void ASSERT(bool b) { if (!b) { print("ASSERT"); int[] foo = {}; foo[42] = 0; } }
 
-    [DllImport("kernel32", SetLastError = true, CharSet = CharSet.Unicode)]
-    static public extern IntPtr LoadLibrary(string lpFileName);
-    [DllImport("kernel32")]
-    static public extern IntPtr GetProcAddress(IntPtr hModule, string procedureName);
-    [DllImport("kernel32", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    static public extern bool FreeLibrary(IntPtr hModule);
-    IntPtr library;
-    delegate void cpp_init(bool SHOW_DRAGON = false);
-    delegate int cpp_getNumVertices();
-    delegate int cpp_getNumTriangles();
-    delegate void cpp_reset();
-    delegate int cpp_getNumCables();
-    delegate void cpp_getNumViasPerCable(
-            void *num_vias__INT_ARRAY);
-    delegate void cpp_getCables(
-            void *cable_positions__FLOAT3_ARRAY,
-            void *tensions__FLOAT_ARRAY);
-    delegate void cpp_solve(
-            int num_feature_points,
-            void *_targetEnabled__BOOL_ARRAY,
-            void *_targetPositions__FLOAT3_ARRAY, //node pos
-            void *vertex_positions__FLOAT3_ARRAY,
-            void *vertex_normals__FLOAT3_ARRAY,
-            void *triangle_indices__UINT_ARRAY,
-            void *feature_point_positions__FLOAT3__ARRAY); // pos on snake
-    delegate bool cpp_castRay(
-            float ray_origin_x,
-            float ray_origin_y,
-            float ray_origin_z,
-            float ray_direction_x,
-            float ray_direction_y,
-            float ray_direction_z,
-            void *intersection_position__FLOAT_ARRAY__LENGTH_3,
-            bool pleaseSetFeaturePoint,
-            int indexOfFeaturePointToSet,
-            void *feature_point_positions__FLOAT3__ARRAY = null);
+    bool JIM_AUTOMATED_TEST = true;
 
-    cpp_init init;
-    cpp_getNumVertices getNumVertices;
-    cpp_getNumTriangles getNumTriangles;
-    cpp_reset reset;
-    cpp_getNumCables getNumCables;
-    cpp_getNumViasPerCable getNumViasPerCable;
-    cpp_getCables getCables;
-    cpp_solve solve;
-    cpp_castRay castRay;
-    //cpp_test test;
-    void LoadDLL() {
-        library = LoadLibrary("Assets/snake");
-        init               = (cpp_init)               Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_init"),               typeof(cpp_init));
-        getNumVertices     = (cpp_getNumVertices)     Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_getNumVertices"),     typeof(cpp_getNumVertices));
-        getNumTriangles    = (cpp_getNumTriangles)    Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_getNumTriangles"),    typeof(cpp_getNumTriangles));
-        reset              = (cpp_reset)              Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_reset"),              typeof(cpp_reset));
-        solve              = (cpp_solve)              Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_solve"),              typeof(cpp_solve));
-        castRay            = (cpp_castRay)            Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_castRay"),            typeof(cpp_castRay));
-        getNumCables       = (cpp_getNumCables)       Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_getNumCables"),       typeof(cpp_getNumCables));    
-        getNumViasPerCable = (cpp_getNumViasPerCable) Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_getNumViasPerCable"), typeof(cpp_getNumViasPerCable));
-        getCables          = (cpp_getCables)          Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_getCables"),          typeof(cpp_getCables));
-        //test            = (cpp_test)            Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_test"),            typeof(cpp_test));
-    }
-
-    public GameObject leftHand;
-    public GameObject rightHand;
     bool inputPressedA;
     bool inputPressedB;
     bool inputPressedX; 
@@ -197,37 +133,6 @@ unsafe public class snake : MonoBehaviour {
     }
 
 
-
-    public GameObject dragon_head;
-    public GameObject dragon_body;
-    DragonMeshManager DMM;
-    const int HEAD = 0;
-    const int BODY = 1;
-
-
-
-    public GameObject node_1;
-    public GameObject head;
-    public GameObject interactionDotRight;
-    public GameObject interactionDotLeft;
-    public GameObject   targetPrefab;
-    public GameObject[] targets;
-    public GameObject cylinderPrefab; 
-    public GameObject   spherePrefab;
-    public GameObject[][][] strings;
-    public GameObject stringsContainer;
-    //int num_cables = 1;
-    public GameObject room;
-    public GameObject demosContainer;
-    public GameObject[] demos;
-    public NodeManager nodeManager;
-    public Vector3 restPos;
-    public UnityEngine.XR.InputFeatureUsage<float> fl;
-    public State curState;
-
-
-
-
     const int VIEW_SNAKE    = 0;
     const int VIEW_CABLES   = 1;
     const int VIEW_ALL      = 2; 
@@ -235,18 +140,19 @@ unsafe public class snake : MonoBehaviour {
     const int VIEW_MEMORIES = 4;
     const int _VIEW_COUNT   = 5;
     int _view;
+    void ViewCycle() { ViewSet((_view + 1) % _VIEW_COUNT); }
     void ViewSet(int view) {
         _view = view;
         bool showUI = (_view < VIEW_DRAGON);
         bool showDragon = (_view != VIEW_SNAKE && _view != VIEW_CABLES);
         bool showCables = (_view == VIEW_CABLES);
-        foreach(GameObject target in targets){
-            if(target != null) target.GetComponent<MeshRenderer>().enabled = showUI;
+        foreach (GameObject featurePoint in featurePoints) {
+            if (featurePoint != null) featurePoint.GetComponent<MeshRenderer>().enabled = showUI;
         }
-        foreach(GameObject node in nodeManager.nodes){
-            if(node != null){
-                node.GetComponent<MeshRenderer>().enabled = showUI;
-                foreach(Transform child in node.transform) {
+        foreach (GameObject target in targetManager.targets) {
+            if (target != null) {
+                target.GetComponent<MeshRenderer>().enabled = showUI;
+                foreach(Transform child in target.transform) {
                     if(child.name == "Lines") {
                         foreach(Transform child2 in child){
                             child2.GetComponent<LineRenderer>().enabled = showUI;
@@ -261,19 +167,150 @@ unsafe public class snake : MonoBehaviour {
         dragon_body.transform.GetComponent<SkinnedMeshRenderer>().enabled = showDragon;
         room.SetActive(_view == VIEW_MEMORIES);
     }
-    void ViewCycle() { ViewSet((_view + 1) % _VIEW_COUNT); }
+
+
+
+    void InstantiateFeaturePoint(Vector3 position) {
+        GameObject featurePoint = Instantiate(targetPrefab, position, Quaternion.identity);
+        featurePoints[targetManager.nextAvalible] = featurePoint;
+        targetManager.CreateNode(position);
+        foreach(Transform child in targetManager.targets[targetManager.nextAvalible-1].transform) {
+            if(child.name == "Lines") {
+                foreach(Transform child2 in child){
+                    child2.GetComponent<LinePos>().head = featurePoint;
+                }
+            }
+        }
+    }
+
+
+
+    int STATE_START           = 0;
+    int STATE_NODE_DRAGGING   = 1;
+    int STATE_TARGET_DRAGGING = 2;
+    int STATE_RELAX           = 3;
+    int STATE_STATIC          = 4;
+    int state;
 
 
 
 
-    int curDemo = 0;
+    // TODO: buffers we maybe need?
+    NativeArray<float> _nativeIntersectionPosition;
+
+
+
+    public TargetManager targetManager;
+
+
+
+
+
+    [DllImport("kernel32", SetLastError = true, CharSet = CharSet.Unicode)]
+    static public extern IntPtr LoadLibrary(string lpFileName);
+    [DllImport("kernel32")]
+    static public extern IntPtr GetProcAddress(IntPtr hModule, string procedureName);
+    [DllImport("kernel32", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    static public extern bool FreeLibrary(IntPtr hModule);
+    IntPtr library;
+    delegate void cpp_init(bool SHOW_DRAGON = false); // TODO
+    delegate int cpp_getNumVertices();
+    delegate int cpp_getNumTriangles();
+    delegate void cpp_reset();
+    delegate int cpp_getNumCables();
+    delegate void cpp_getNumViasPerCable(
+            void *num_vias__INT_ARRAY);
+    delegate void cpp_getCables(
+            void *cable_positions__FLOAT3_ARRAY,
+            void *tensions__FLOAT_ARRAY);
+    delegate void cpp_solve(
+            int num_feature_points,
+            void *_targetEnabled__BOOL_ARRAY,
+            void *_targetPositions__FLOAT3_ARRAY, //target position
+            void *vertex_positions__FLOAT3_ARRAY,
+            void *vertex_normals__FLOAT3_ARRAY,
+            void *triangle_indices__UINT_ARRAY,
+            void *feature_point_positions__FLOAT3__ARRAY); // position on snake
+    delegate bool cpp_castRay(
+            float ray_origin_x,
+            float ray_origin_y,
+            float ray_origin_z,
+            float ray_direction_x,
+            float ray_direction_y,
+            float ray_direction_z,
+            void *intersection_position__FLOAT_ARRAY__LENGTH_3,
+            bool pleaseSetFeaturePoint,
+            int indexOfFeaturePointToSet,
+            void *feature_point_positions__FLOAT3__ARRAY = null);
+
+    cpp_init init;
+    cpp_getNumVertices getNumVertices;
+    cpp_getNumTriangles getNumTriangles;
+    cpp_reset reset;
+    cpp_getNumCables getNumCables;
+    cpp_getNumViasPerCable getNumViasPerCable;
+    cpp_getCables getCables;
+    cpp_solve solve;
+    cpp_castRay castRay;
+    //cpp_test test;
+    void LoadDLL() {
+        library = LoadLibrary("Assets/snake");
+        init               = (cpp_init)               Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_init"),               typeof(cpp_init));
+        getNumVertices     = (cpp_getNumVertices)     Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_getNumVertices"),     typeof(cpp_getNumVertices));
+        getNumTriangles    = (cpp_getNumTriangles)    Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_getNumTriangles"),    typeof(cpp_getNumTriangles));
+        reset              = (cpp_reset)              Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_reset"),              typeof(cpp_reset));
+        solve              = (cpp_solve)              Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_solve"),              typeof(cpp_solve));
+        castRay            = (cpp_castRay)            Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_castRay"),            typeof(cpp_castRay));
+        getNumCables       = (cpp_getNumCables)       Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_getNumCables"),       typeof(cpp_getNumCables));    
+        getNumViasPerCable = (cpp_getNumViasPerCable) Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_getNumViasPerCable"), typeof(cpp_getNumViasPerCable));
+        getCables          = (cpp_getCables)          Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_getCables"),          typeof(cpp_getCables));
+        //test            = (cpp_test)            Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_test"),            typeof(cpp_test));
+    }
+
+    public GameObject leftHand;
+    public GameObject rightHand;
+
+
+
+
+
+    public GameObject dragon_head;
+    public GameObject dragon_body;
+    DragonMeshManager dragonMeshManager;
+    const int HEAD = 0;
+    const int BODY = 1;
+
+
+
+    public GameObject node_1;
+    public GameObject head;
+    public GameObject interactionDotRight;
+    public GameObject interactionDotLeft;
+    public GameObject   targetPrefab;
+    public GameObject[] featurePoints;
+    public GameObject cylinderPrefab; 
+    public GameObject   spherePrefab;
+    public GameObject[][][] strings;
+    public GameObject stringsContainer;
+    //int num_cables = 1;
+    public GameObject room;
+    public Vector3 restPos;
+    public UnityEngine.XR.InputFeatureUsage<float> fl;
+
+
+
+
+
+
+
+
 
     public const float radius = 0.025f;
 
     // Vector3 node_pos;
     Color targetColor;
 
-    NativeArray<float> intersection_position;
     NativeArray<float3> posOnSnake; 
 
     NativeArray<int> num_vias; 
@@ -288,31 +325,53 @@ unsafe public class snake : MonoBehaviour {
     int rightSelectedTargetIndex = -1;
     int  leftSelectedTargetIndex = -1;
 
+
+
     void Awake () {
         LoadDLL();
-        // init();
-        init(false); // TODO
-        demos = InitDemos();
-        intersection_position = new NativeArray<float>(3, Allocator.Persistent);
-        posOnSnake = new NativeArray<float3>(nodeManager.numNodes, Allocator.Persistent);
 
-        targets = new GameObject[nodeManager.numNodes];
-        //targets[0] = head;
+        // init(true);
+        init(false);
+
+        _nativeIntersectionPosition = new NativeArray<float>(3, Allocator.Persistent);
+        posOnSnake = new NativeArray<float3>(targetManager.numNodes, Allocator.Persistent);
+
+        featurePoints = new GameObject[targetManager.numNodes];
+        //featurePoints[0] = head;
         targetColor = targetPrefab.transform.GetComponent<MeshRenderer>().sharedMaterial.GetColor("_Color");
 
 
-        DMM = new DragonMeshManager(dragon_head, dragon_body);
-        DMM.SetUpAll();
+        dragonMeshManager = new DragonMeshManager(dragon_head, dragon_body);
+        dragonMeshManager.SetUpAll();
         strings = InitCables();
         stringsContainer.SetActive(false);
         //strings[0] = InitCylinderForString(Vector3.zero,Vector3.zero);
-        DrawMesh(); 
-        curState = State.Starting;
+        SolveWrapper(); 
 
-        ViewSet(VIEW_CABLES);
+
+        if (JIM_AUTOMATED_TEST) {
+            ViewSet(VIEW_CABLES);
+
+            state = STATE_TARGET_DRAGGING;
+
+            // TODO: CastRayWrapper
+            if (castRay(0.0f, -0.6f, -1.0f, 0.0f, 0.0f, 1.0f, NativeArrayUnsafeUtility.GetUnsafePtr(_nativeIntersectionPosition), true, targetManager.nextAvalible)) {
+                InstantiateFeaturePoint(new Vector3(_nativeIntersectionPosition[0], _nativeIntersectionPosition[1], _nativeIntersectionPosition[2]));
+            }
+        }
     }
 
+    float jimTime = 0.0f;
     void Update () {
+        if (JIM_AUTOMATED_TEST) {
+            jimTime += 0.0167f;
+            targetManager.targets[0].transform.position = new Vector3(
+                    0.2f * Mathf.Sin(5 * jimTime),
+                    targetManager.targets[0].transform.position.y,
+                    targetManager.targets[0].transform.position.z
+                    );
+        }
+
         InputUpdate();
 
         //find any sphere interactions  
@@ -331,26 +390,27 @@ unsafe public class snake : MonoBehaviour {
 
             rightEnteredTarget = (rightTargetTemp == -1 && rightSelectedTargetIndex != -1);
             leftEnteredTarget = ( leftTargetTemp == -1 &&  leftSelectedTargetIndex != -1);
-            rightLeaveTarget   = ResetColor(rightTargetTemp, rightSelectedTargetIndex);
-            leftLeaveTarget   = ResetColor( leftTargetTemp,  leftSelectedTargetIndex);
+            rightLeaveTarget  = ResetColor(rightTargetTemp, rightSelectedTargetIndex);
+            leftLeaveTarget  = ResetColor( leftTargetTemp,  leftSelectedTargetIndex);
         }
 
         //mesh gen
-        if (curState == State.TargetDragging || curState == State.NodeDragging || curState == State.Relaxing) {DrawMesh(); UpdateCables();}
+        if (state == STATE_TARGET_DRAGGING || state == STATE_NODE_DRAGGING || state == STATE_RELAX) {
+            SolveWrapper(); UpdateCables();
+        }
 
-        DMM.UpdateAll();
+        dragonMeshManager.UpdateAll();
 
-        //cast interaction dots
-        {
+        { //interaction dots
             //left cast
             if (castRay(
                         inputLeftRayOrigin.x,inputLeftRayOrigin.y,inputLeftRayOrigin.z,
                         inputLeftRayDirection.x,inputLeftRayDirection.y,inputLeftRayDirection.z,
-                        NativeArrayUnsafeUtility.GetUnsafePtr(intersection_position),
+                        NativeArrayUnsafeUtility.GetUnsafePtr(_nativeIntersectionPosition),
                         false, -1, NativeArrayUnsafeUtility.GetUnsafePtr(posOnSnake))) {
                 interactionDotLeft.SetActive(true);
-                Vector3 dotPos = new Vector3(intersection_position[0], intersection_position[1], intersection_position[2]);
-                if(leftSelectedTargetIndex != -1 && curState == State.TargetDragging) {
+                Vector3 dotPos = new Vector3(_nativeIntersectionPosition[0], _nativeIntersectionPosition[1], _nativeIntersectionPosition[2]);
+                if(leftSelectedTargetIndex != -1 && state == STATE_TARGET_DRAGGING) {
                     posOnSnake[leftSelectedTargetIndex] = dotPos;
                 }
                 interactionDotLeft.transform.position = dotPos;
@@ -363,86 +423,78 @@ unsafe public class snake : MonoBehaviour {
             if (castRay(
                         inputRightRayOrigin.x,inputRightRayOrigin.y,inputRightRayOrigin.z,
                         inputRightRayDirection.x,inputRightRayDirection.y,inputRightRayDirection.z,
-                        NativeArrayUnsafeUtility.GetUnsafePtr(intersection_position),
+                        NativeArrayUnsafeUtility.GetUnsafePtr(_nativeIntersectionPosition),
                         false, -1)) {
                 interactionDotRight.SetActive(true);
-                interactionDotRight.transform.position = new Vector3(intersection_position[0], intersection_position[1], intersection_position[2]);
+                interactionDotRight.transform.position = new Vector3(_nativeIntersectionPosition[0], _nativeIntersectionPosition[1], _nativeIntersectionPosition[2]);
             }
             else{
                 interactionDotRight.SetActive(false);
             }
         }
-        //button control
-        {
-            if(inputPressedMenu) curState = State.Static;
-            if(inputPressedLeftTrigger || inputPressedRightTrigger)
-            {
-                GenNode(inputPressedLeftTrigger, inputPressedRightTrigger);
-            } //generate new target node
-            else if(inputPressedY || inputPressedB)
-            {
-                nodeManager.Setup();
-                reset();
-                for(int k = 0; k < nodeManager.numNodes; k++){
-                    if(targets[k] != null) {
-                        Destroy(targets[k]);
+
+        { //button control
+            if(inputPressedMenu) state = STATE_STATIC;
+            if(inputPressedLeftTrigger || inputPressedRightTrigger) {
+                if (inputPressedLeftTrigger) {
+                    if (castRay(inputLeftRayOrigin.x, inputLeftRayOrigin.y, inputLeftRayOrigin.z, inputLeftRayDirection.x, inputLeftRayDirection.y, inputLeftRayDirection.z, NativeArrayUnsafeUtility.GetUnsafePtr(_nativeIntersectionPosition),  true, targetManager.nextAvalible)) {
+                        InstantiateFeaturePoint(new Vector3(_nativeIntersectionPosition[0], _nativeIntersectionPosition[1], _nativeIntersectionPosition[2]));
                     }
                 }
-                //curState = State.Relaxing;
-                DrawMesh(); 
+                if (inputPressedRightTrigger) {
+                    if (castRay(inputRightRayOrigin.x, inputRightRayOrigin.y, inputRightRayOrigin.z, inputRightRayDirection.x, inputRightRayDirection.y, inputRightRayDirection.z, NativeArrayUnsafeUtility.GetUnsafePtr(_nativeIntersectionPosition), true, targetManager.nextAvalible)) {
+                        InstantiateFeaturePoint(new Vector3(_nativeIntersectionPosition[0], _nativeIntersectionPosition[1], _nativeIntersectionPosition[2]));
+                    }
+                }
+            } else if(inputPressedY || inputPressedB) {
+                targetManager.Setup();
+                reset();
+                for(int k = 0; k < targetManager.numNodes; k++){
+                    if(featurePoints[k] != null) {
+                        Destroy(featurePoints[k]);
+                    }
+                }
+                //state = STATE_RELAX;
+                SolveWrapper(); 
                 UpdateCables();
-                curState = State.Starting;         
-                //nodeManager.nodes[0].SetActive(true);
-            } //reset
-            else if(leftSelectedNodeIndex != -1 || rightSelectedNodeIndex != -1 || leftSelectedTargetIndex != -1 || rightSelectedTargetIndex != -1)
-            {
+                state = STATE_START;         
+                //targetManager.targets[0].SetActive(true);
+            } else if (leftSelectedNodeIndex != -1 || rightSelectedNodeIndex != -1 || leftSelectedTargetIndex != -1 || rightSelectedTargetIndex != -1) {
                 bool nodeOrTarget = (leftSelectedNodeIndex != -1 || rightSelectedNodeIndex != -1);
                 bool left = nodeOrTarget ? (leftSelectedNodeIndex != -1) : (leftSelectedTargetIndex != -1);
                 //delete
-                if(nodeOrTarget && (left ? inputPressedX : inputPressedA)) { 
-                    foreach(Transform child in nodeManager.nodes[left ? leftSelectedNodeIndex : rightSelectedNodeIndex].transform) {
+                if (nodeOrTarget && (left ? inputPressedX : inputPressedA)) { 
+                    foreach(Transform child in targetManager.targets[left ? leftSelectedNodeIndex : rightSelectedNodeIndex].transform) {
                         if(child.name == "Lines") {
                             foreach(Transform child2 in child){
                                 if(child2.GetComponent<LinePos>().head != null) child2.GetComponent<LinePos>().head.SetActive(false);
                             }
                         }
                     }
-                    nodeManager.nodes[left ? leftSelectedNodeIndex : rightSelectedNodeIndex].SetActive(false);
-                    curState = State.Relaxing;
-                    //if(nodeManager.AnyActive()) ExcuseToUseIEnumeratorAndCoroutinesEvenThoughThereAreDeffinitlyBetterWaysToDoThisAndThisIsntEvenSomthingThatIsVeryNecessaryToDo();
-                } //drag 
-                else if(left ? inputPressedLeftGrip : inputPressedRightGrip) {
-                    curState = nodeOrTarget ? State.NodeDragging : State.TargetDragging;
-                } //release
-                else if(left ? inputReleasedLeftGrip : inputReleasedRightGrip) {
-                    curState = nodeOrTarget ? State.Relaxing : State.Static;
-                    //if(nodeOrTarget) ExcuseToUseIEnumeratorAndCoroutinesEvenThoughThereAreDeffinitlyBetterWaysToDoThisAndThisIsntEvenSomthingThatIsVeryNecessaryToDo();
+                    targetManager.targets[left ? leftSelectedNodeIndex : rightSelectedNodeIndex].SetActive(false);
+                    state = STATE_RELAX;
+                } else if (left ? inputPressedLeftGrip : inputPressedRightGrip) {
+                    state = nodeOrTarget ? STATE_NODE_DRAGGING : STATE_TARGET_DRAGGING;
+                } else if (left ? inputReleasedLeftGrip : inputReleasedRightGrip) {
+                    state = nodeOrTarget ? STATE_RELAX : STATE_STATIC;
                 }
-                //else curState = nodeOrTarget ? State.Relaxing : State.Static;
+                //else state = nodeOrTarget ? STATE_RELAX : STATE_STATIC;
             } //delete and drag <- I think there is a mistake here that is keeping it in relaxing mode when should be static
-            if(inputPressedLeftStick || Input.GetKeyDown("n"))
-            {
-                ViewCycle();
-            } //change mode
-            if(inputPressedRightStick)
-            {
-                CycleDemos();
-            } //change demo being shown
-            if(leftEnteredTarget || rightEnteredTarget)
-            {
+            if(inputPressedLeftStick || Input.GetKeyDown("n")) { ViewCycle(); }
+            if(leftEnteredTarget || rightEnteredTarget) {
                 UnityEngine.XR.InputDevices.GetDeviceAtXRNode(leftEnteredTarget ? UnityEngine.XR.XRNode.LeftHand : UnityEngine.XR.XRNode.RightHand).SendHapticImpulse(0, 0.3f, 0.15f);
             } //haptic feedback
             if(leftSelectedTargetIndex != -1 || rightSelectedTargetIndex != -1)
             { 
                 //Color newColor = new Color(targetColor.r, targetColor.g, targetColor.b, targetColor.a * 0.7f);
-                targets[leftSelectedTargetIndex != -1 ? leftSelectedTargetIndex : rightSelectedTargetIndex].transform.GetComponent<MeshRenderer>().material.SetColor("_Color", Color.blue);
+                featurePoints[leftSelectedTargetIndex != -1 ? leftSelectedTargetIndex : rightSelectedTargetIndex].transform.GetComponent<MeshRenderer>().material.SetColor("_Color", Color.blue);
             } //change color slightly <- come back to 
 
         }
-        //clamp pos
+        //clamp position
     }
 
-    void DrawMesh(){
+    void SolveWrapper(){
         // node_pos = node_1.transform.position; // ???
 
         int triangleIndexCount = getNumTriangles() * 3; 
@@ -463,21 +515,20 @@ unsafe public class snake : MonoBehaviour {
         }
 
 
-        NativeArray<int> nativeBools = new NativeArray<int>(nodeManager.numNodes, Allocator.Temp);
-        NativeArray<float3> nativeTargetPos = new NativeArray<float3>(nodeManager.numNodes, Allocator.Temp);
+        NativeArray<int> nativeBools = new NativeArray<int>(targetManager.numNodes, Allocator.Temp);
+        NativeArray<float3> nativeTargetPos = new NativeArray<float3>(targetManager.numNodes, Allocator.Temp);
         {
-            bool[] bools = nodeManager.getBools();
-            for(int k = 0; k < nodeManager.numNodes; k++){
-                if(bools[k]) nativeBools[k] = 1;
+            for(int k = 0; k < targetManager.numNodes; k++){
+                if (targetManager.isActive(k)) nativeBools[k] = 1;
                 else nativeBools[k] = 0;
-                nativeTargetPos[k] = new float3 (nodeManager.nodes[k].transform.position.x, nodeManager.nodes[k].transform.position.y, nodeManager.nodes[k].transform.position.z);
+                nativeTargetPos[k] = new float3 (targetManager.targets[k].transform.position.x, targetManager.targets[k].transform.position.y, targetManager.targets[k].transform.position.z);
             }
         }
 
         var simulationMeshPositions = (float3 *) NativeArrayUnsafeUtility.GetUnsafePtr(meshData.GetVertexData<float3>(0));
 
         solve(
-                nodeManager.numNodes,
+                targetManager.numNodes,
                 NativeArrayUnsafeUtility.GetUnsafePtr(nativeBools),
                 NativeArrayUnsafeUtility.GetUnsafePtr(nativeTargetPos),
                 simulationMeshPositions,
@@ -489,8 +540,8 @@ unsafe public class snake : MonoBehaviour {
         nativeTargetPos.Dispose();
 
 
-        for(int k = 0; k < nodeManager.nextAvalible; k++){
-            targets[k].transform.position = posOnSnake[k];
+        for(int k = 0; k < targetManager.nextAvalible; k++){
+            featurePoints[k].transform.position = posOnSnake[k];
         }
 
 
@@ -505,20 +556,12 @@ unsafe public class snake : MonoBehaviour {
         mesh.RecalculateBounds();
         GetComponent<MeshFilter>().mesh = mesh;
         bool found = false;
-        foreach(Transform demo in demosContainer.transform){
-            if(demo.name == "Demo 1" && demo.gameObject.activeSelf) {
-                GetComponent<MeshCollider>().sharedMesh = mesh;
-                GetComponent<MeshCollider>().enabled = true;
-                found = true;
-                break;
-            } 
-        }
         if(!found) GetComponent<MeshCollider>().enabled = false;
     }
 
     bool ResetColor(int tempIndex, int curIndex){
         if(tempIndex != -1 && curIndex == -1) {
-            targets[tempIndex].transform.GetComponent<MeshRenderer>().material.SetColor("_Color", targetColor);
+            featurePoints[tempIndex].transform.GetComponent<MeshRenderer>().material.SetColor("_Color", targetColor);
             return true;
         }
         return false;
@@ -602,63 +645,19 @@ unsafe public class snake : MonoBehaviour {
     }
 
 
-    GameObject[] InitDemos() {
-        int ind = 0;
-        GameObject[] tempDemos = new GameObject[demosContainer.transform.childCount];
-        foreach(Transform demo in demosContainer.transform){
-            tempDemos[ind] = demo.gameObject;
-            ind++;
-        }
-        return tempDemos;
-    }
 
-    void CycleDemos() {
-        if(curDemo != 0) demos[curDemo - 1].SetActive(false);
-        curDemo = (curDemo == demosContainer.transform.childCount) ? 0 : curDemo + 1;
-        if(curDemo != 0) demos[curDemo - 1].SetActive(true);
-    } 
 
     public void GenNode(bool leftHandFire, bool rightHandFire) {
-        if(gameObject.activeSelf && (nodeManager.nextAvalible != nodeManager.numNodes)){
-
-            Vector3 ray_origin_r = new Vector3(); Vector3 ray_origin_l = new Vector3();
-            ASSERT(rightHand!=null && leftHand!=null); 
-            foreach(Transform child in rightHand.transform){if(child.name == "[Ray Interactor] Ray Origin") ray_origin_r = child.position;} 
-            foreach(Transform child in leftHand.transform) {if(child.name == "[Ray Interactor] Ray Origin") ray_origin_l = child.position;}
-
-            Vector3 ray_direction_r = rightHand.transform.rotation * Vector3.forward;
-            Vector3 ray_direction_l = leftHand.transform.rotation  * Vector3.forward;
-
-            if (castRay(ray_origin_r.x, ray_origin_r.y, ray_origin_r.z, ray_direction_r.x, ray_direction_r.y, ray_direction_r.z, NativeArrayUnsafeUtility.GetUnsafePtr(intersection_position), rightHandFire, nodeManager.nextAvalible) && rightHandFire) {
-                InstantiateNode();
-            }
-            if (castRay(ray_origin_l.x, ray_origin_l.y, ray_origin_l.z, ray_direction_l.x, ray_direction_l.y, ray_direction_l.z, NativeArrayUnsafeUtility.GetUnsafePtr(intersection_position),  leftHandFire, nodeManager.nextAvalible) &&  leftHandFire) {
-                InstantiateNode();
-            }
-        }
     }
 
-    void InstantiateNode() {
-        Vector3 pos = new Vector3(intersection_position[0], intersection_position[1], intersection_position[2]);                
-        GameObject tar = Instantiate(targetPrefab, pos, Quaternion.identity);
-        targets[nodeManager.nextAvalible] = tar;
-        nodeManager.SetProperties(pos);
-        foreach(Transform child in nodeManager.nodes[nodeManager.nextAvalible-1].transform) {
-            if(child.name == "Lines") {
-                foreach(Transform child2 in child){
-                    child2.GetComponent<LinePos>().head = tar;
-                }
-            }
-        }
-    }
 
     int SphereCast(Vector3 origin, Vector3 direction, bool nodeOrTarget) {
         int indexToReturn = -1;
-        for (int index = 0; index < (nodeOrTarget ? nodeManager.nodes.Length : (nodeManager.nextAvalible)); ++index) {
-            GameObject node = nodeOrTarget ? nodeManager.nodes[index] : targets[index];
-            if (!node.activeSelf) { continue; }
+        for (int index = 0; index < (nodeOrTarget ? targetManager.targets.Length : (targetManager.nextAvalible)); ++index) {
+            GameObject target = nodeOrTarget ? targetManager.targets[index] : featurePoints[index];
+            if (!target.activeSelf) { continue; }
 
-            Vector3 center = node.transform.position;
+            Vector3 center = target.transform.position;
             Vector3 oc = origin - center;
             float a = Vector3.Dot(direction, direction);
             float half_b = Vector3.Dot(oc, direction);
@@ -666,22 +665,22 @@ unsafe public class snake : MonoBehaviour {
             float discriminant = half_b * half_b  - a*c;
             if(discriminant > 0) {
                 if (indexToReturn == -1) indexToReturn = index;
-                else if((oc.magnitude < (origin - nodeManager.nodes[indexToReturn].transform.position).magnitude)) indexToReturn = index;
+                else if((oc.magnitude < (origin - targetManager.targets[indexToReturn].transform.position).magnitude)) indexToReturn = index;
             }
-            if(nodeOrTarget) Clamp(node);
+            if(nodeOrTarget) Clamp(target);
         }
         return indexToReturn;
     }
 
-    void Clamp(GameObject node){
-        node.transform.GetComponent<Rigidbody>().velocity = new Vector3(0.0f, 0.0f, 0.0f);
+    void Clamp(GameObject target){
+        target.transform.GetComponent<Rigidbody>().velocity = new Vector3(0.0f, 0.0f, 0.0f);
         Vector3 new_pos = new Vector3(
-                Mathf.Clamp(node.transform.position.x, -2.0f, 2.0f),
-                Mathf.Clamp(node.transform.position.y, -2.0f, 2.0f), 
-                Mathf.Clamp(node.transform.position.z, -2.0f, 2.0f)
+                Mathf.Clamp(target.transform.position.x, -2.0f, 2.0f),
+                Mathf.Clamp(target.transform.position.y, -2.0f, 2.0f), 
+                Mathf.Clamp(target.transform.position.z, -2.0f, 2.0f)
                 );
 
-        node.transform.position = new_pos;
+        target.transform.position = new_pos;
     }
 
     void OnApplicationQuit () {
@@ -693,15 +692,26 @@ unsafe public class snake : MonoBehaviour {
 
         FreeLibrary(library);
         posOnSnake.Dispose(); 
-        intersection_position.Dispose();
+        _nativeIntersectionPosition.Dispose();
         num_vias.Dispose();
         cable_positions.Dispose();
         tensions.Dispose();
     }
 }
 
-unsafe public class DragonMeshManager {
 
+
+
+
+
+
+
+
+
+
+
+
+unsafe public class DragonMeshManager {
     [DllImport("kernel32", SetLastError = true, CharSet = CharSet.Unicode)]
     static public extern IntPtr LoadLibrary(string lpFileName);
 
@@ -929,5 +939,4 @@ unsafe public class DragonMeshManager {
             head.GetComponent<SkinnedMeshRenderer>().sharedMesh.RecalculateBounds();
         }
     }
-
 }

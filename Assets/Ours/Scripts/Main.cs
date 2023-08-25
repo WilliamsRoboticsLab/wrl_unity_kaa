@@ -182,9 +182,25 @@ unsafe public class Main : MonoBehaviour {
 
 
 
-
-    // TODO: buffers we maybe need?
-    NativeArray<float> _nativeIntersectionPosition;
+    NativeArray<float> _castRayIntersectionPosition;
+    bool CastRayWrapper(Vector3 rayOrigin, Vector3 rayDirection, bool pleaseSetFeaturePoint) {
+        bool result = castRay(
+                rayOrigin.x,
+                rayOrigin.y,
+                rayOrigin.z,
+                rayDirection.x,
+                rayDirection.y,
+                rayDirection.z,
+                NativeArrayUnsafeUtility.GetUnsafePtr(_castRayIntersectionPosition),
+                pleaseSetFeaturePoint,
+                targetNumTargets);
+        if (pleaseSetFeaturePoint) {
+            if (result) {
+                TargetSpawn(new Vector3(_castRayIntersectionPosition[0], _castRayIntersectionPosition[1], _castRayIntersectionPosition[2]));
+            }
+        }
+        return result;
+    }
 
 
 
@@ -205,7 +221,6 @@ unsafe public class Main : MonoBehaviour {
         targetGameObjects[targetNumTargets].SetActive(true);
 
         featurePoints[targetNumTargets] = Instantiate(targetPrefab, position, Quaternion.identity);
-
 
         foreach (Transform child in targetGameObjects[targetNumTargets].transform) {
             if (child.name == "Lines") {
@@ -348,7 +363,7 @@ unsafe public class Main : MonoBehaviour {
 
         TargetAwake();
 
-        _nativeIntersectionPosition = new NativeArray<float>(3, Allocator.Persistent);
+        _castRayIntersectionPosition = new NativeArray<float>(3, Allocator.Persistent);
         posOnSnake = new NativeArray<float3>(targetMaxNumberOfTargets, Allocator.Persistent);
 
 
@@ -371,10 +386,7 @@ unsafe public class Main : MonoBehaviour {
 
             state = STATE_TARGET_DRAGGING;
 
-            // TODO: CastRayWrapper
-            if (castRay(0.0f, -0.6f, -1.0f, 0.0f, 0.0f, 1.0f, NativeArrayUnsafeUtility.GetUnsafePtr(_nativeIntersectionPosition), true, targetNumTargets)) {
-                TargetSpawn(new Vector3(_nativeIntersectionPosition[0], _nativeIntersectionPosition[1], _nativeIntersectionPosition[2]));
-            }
+            CastRayWrapper(new Vector3(0.0f, -0.6f, -1.0f), new Vector3(0.0f, 0.0f, 1.0f), true);
         }
     }
 
@@ -421,32 +433,17 @@ unsafe public class Main : MonoBehaviour {
 
         { //interaction dots
             //left cast
-            if (castRay(
-                        inputLeftRayOrigin.x,inputLeftRayOrigin.y,inputLeftRayOrigin.z,
-                        inputLeftRayDirection.x,inputLeftRayDirection.y,inputLeftRayDirection.z,
-                        NativeArrayUnsafeUtility.GetUnsafePtr(_nativeIntersectionPosition),
-                        false, -1, NativeArrayUnsafeUtility.GetUnsafePtr(posOnSnake))) {
+            if (CastRayWrapper(inputLeftRayOrigin, inputLeftRayDirection, false)) {
                 interactionDotLeft.SetActive(true);
-                Vector3 dotPos = new Vector3(_nativeIntersectionPosition[0], _nativeIntersectionPosition[1], _nativeIntersectionPosition[2]);
-                if(leftSelectedTargetIndex != -1 && state == STATE_TARGET_DRAGGING) {
-                    posOnSnake[leftSelectedTargetIndex] = dotPos;
-                }
-                interactionDotLeft.transform.position = dotPos;
-            }
-            else{
+                interactionDotLeft.transform.position = new Vector3(_castRayIntersectionPosition[0], _castRayIntersectionPosition[1], _castRayIntersectionPosition[2]);
+            } else {
                 interactionDotLeft.SetActive(false);
             }
 
-            //right cast
-            if (castRay(
-                        inputRightRayOrigin.x,inputRightRayOrigin.y,inputRightRayOrigin.z,
-                        inputRightRayDirection.x,inputRightRayDirection.y,inputRightRayDirection.z,
-                        NativeArrayUnsafeUtility.GetUnsafePtr(_nativeIntersectionPosition),
-                        false, -1)) {
+            if (CastRayWrapper(inputRightRayOrigin, inputRightRayDirection, false)) {
                 interactionDotRight.SetActive(true);
-                interactionDotRight.transform.position = new Vector3(_nativeIntersectionPosition[0], _nativeIntersectionPosition[1], _nativeIntersectionPosition[2]);
-            }
-            else{
+                interactionDotRight.transform.position = new Vector3(_castRayIntersectionPosition[0], _castRayIntersectionPosition[1], _castRayIntersectionPosition[2]);
+            } else {
                 interactionDotRight.SetActive(false);
             }
         }
@@ -454,16 +451,8 @@ unsafe public class Main : MonoBehaviour {
         { //button control
             if(inputPressedMenu) state = STATE_STATIC;
             if(inputPressedLeftTrigger || inputPressedRightTrigger) {
-                if (inputPressedLeftTrigger) {
-                    if (castRay(inputLeftRayOrigin.x, inputLeftRayOrigin.y, inputLeftRayOrigin.z, inputLeftRayDirection.x, inputLeftRayDirection.y, inputLeftRayDirection.z, NativeArrayUnsafeUtility.GetUnsafePtr(_nativeIntersectionPosition),  true, targetNumTargets)) {
-                        TargetSpawn(new Vector3(_nativeIntersectionPosition[0], _nativeIntersectionPosition[1], _nativeIntersectionPosition[2]));
-                    }
-                }
-                if (inputPressedRightTrigger) {
-                    if (castRay(inputRightRayOrigin.x, inputRightRayOrigin.y, inputRightRayOrigin.z, inputRightRayDirection.x, inputRightRayDirection.y, inputRightRayDirection.z, NativeArrayUnsafeUtility.GetUnsafePtr(_nativeIntersectionPosition), true, targetNumTargets)) {
-                        TargetSpawn(new Vector3(_nativeIntersectionPosition[0], _nativeIntersectionPosition[1], _nativeIntersectionPosition[2]));
-                    }
-                }
+                if (inputPressedLeftTrigger) { CastRayWrapper(inputLeftRayOrigin, inputLeftRayDirection, true); }
+                if (inputPressedRightTrigger) { CastRayWrapper(inputRightRayOrigin, inputRightRayDirection, true); }
             } else if(inputPressedY || inputPressedB) {
                 TargetAwake();
                 reset();
@@ -710,7 +699,7 @@ unsafe public class Main : MonoBehaviour {
 
         FreeLibrary(library);
         posOnSnake.Dispose(); 
-        _nativeIntersectionPosition.Dispose();
+        _castRayIntersectionPosition.Dispose();
         num_vias.Dispose();
         cable_positions.Dispose();
         tensions.Dispose();

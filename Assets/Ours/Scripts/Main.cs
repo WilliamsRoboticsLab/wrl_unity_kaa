@@ -369,17 +369,20 @@ unsafe public class Main : MonoBehaviour {
         return new GameObject(gameObjectName);
     }
 
+    void GAME_OBJECT_SET_CHILDS_PARENT(GameObject childGameObject, GameObject parentGameObject) {
+        childGameObject.transform.parent = parentGameObject.transform;
+    }
+
     GameObject PREFAB_INSTANTIATE(GameObject prefab, String gameObjectName = null) {
         GameObject result = GameObject.Instantiate(prefab);
+        ASSERT(result != null);
         result.name = (gameObjectName != null) ? gameObjectName : prefab.name;
         return result;
     }
 
-    GameObject PREFAB_LOAD(String resourceName, bool instantiate = false, String gameObjectName = null) {
+    GameObject PREFAB_LOAD(String resourceName) {
         GameObject result = (GameObject) Resources.Load(resourceName);
         ASSERT(result != null);
-        if (instantiate) { result = PREFAB_INSTANTIATE(result); }
-        result.name = (gameObjectName != null) ? gameObjectName : resourceName;
         return result;
     }
 
@@ -393,10 +396,18 @@ unsafe public class Main : MonoBehaviour {
         prefabFeaturePoint  = PREFAB_LOAD("prefabFeaturePoint");
         prefabCableSphere   = PREFAB_LOAD("prefabCableSphere");
         prefabCableCylinder = PREFAB_LOAD("prefabCableCylinder");
-        interactionDotLeft  = PREFAB_LOAD("prefabInteractionDot", true, "interactionDotLeft");
-        interactionDotRight = PREFAB_LOAD("prefabInteractionDot", true, "interactionDotRight");
+        GameObject prefabInteractionDot = PREFAB_LOAD("prefabInteractionDot");
+        interactionDotLeft  = PREFAB_INSTANTIATE(prefabInteractionDot, "interactionDotLeft");
+        interactionDotRight = PREFAB_INSTANTIATE(prefabInteractionDot, "interactionDotRight");
         interactionDotLeft.SetActive(false);
         interactionDotRight.SetActive(false);
+
+        GameObject widgets = GAME_OBJECT_CREATE("widgets");
+        GameObject prefabWidget = PREFAB_LOAD("prefabWidget");
+        for (int i = 0; i < 16; ++i) {
+            GameObject widget = PREFAB_INSTANTIATE(prefabWidget, "widget " + i);
+            GAME_OBJECT_SET_CHILDS_PARENT(widget, widgets);
+        }
 
         TargetAwake();
 

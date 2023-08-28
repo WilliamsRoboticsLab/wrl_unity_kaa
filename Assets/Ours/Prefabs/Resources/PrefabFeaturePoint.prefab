@@ -15,7 +15,7 @@ GameObject:
   - component: {fileID: 1873500125137650698}
   - component: {fileID: -3364142033719647455}
   m_Layer: 8
-  m_Name: PrefabFeaturePoint
+  m_Name: prefabFeaturePoint
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

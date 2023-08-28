@@ -9,7 +9,7 @@
 
 using System;
 using System.Collections;
-using System.Diagnostics;
+// using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Threading;
 using Unity.Collections;
@@ -20,7 +20,13 @@ using UnityEngine.Rendering;
 
 [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
 unsafe public class Main : MonoBehaviour {
-    void ASSERT(bool b) { if (!b) { print("ASSERT"); int[] foo = {}; foo[42] = 0; } }
+    void ASSERT(bool b) {
+        if (!b) {
+            Debug.Log("[ASSERT]");
+            Debug.Log(Environment.StackTrace);
+            UnityEditor.EditorApplication.isPlaying = false;
+        }
+    }
 
     bool JIM_AUTOMATED_TEST = true;
 
@@ -131,6 +137,12 @@ unsafe public class Main : MonoBehaviour {
     }
 
 
+    GameObject prefabFeaturePoint;
+    GameObject prefabCableSphere;
+    GameObject prefabCableCylinder; 
+    GameObject interactionDotLeft;
+    GameObject interactionDotRight;
+
 
     // TODO: get rid of view set (once there's a simple pass through activating and deactivating game objects)
     // TODO: just have two booleans viewShowDragon, viewShowMemories
@@ -229,7 +241,8 @@ unsafe public class Main : MonoBehaviour {
         targetGameObjects[targetNumTargets].transform.position = position;
         targetGameObjects[targetNumTargets].SetActive(true);
 
-        featurePointGameObjects[targetNumTargets] = Instantiate(prefabFeaturePoint, position, Quaternion.identity);
+        featurePointGameObjects[targetNumTargets] = PREFAB_INSTANTIATE(prefabFeaturePoint, "featurePoint");
+        featurePointGameObjects[targetNumTargets].transform.position = position;
 
         foreach (Transform child in targetGameObjects[targetNumTargets].transform) {
             if (child.name == "Lines") {
@@ -242,6 +255,12 @@ unsafe public class Main : MonoBehaviour {
 
         targetNumTargets++;
     }
+
+    //sphere intersection
+    int rightSelectedNodeIndex   = -1;
+    int  leftSelectedNodeIndex   = -1;
+    int rightSelectedTargetIndex = -1;
+    int  leftSelectedTargetIndex = -1;
 
 
     [DllImport("kernel32", SetLastError = true, CharSet = CharSet.Unicode)]
@@ -320,8 +339,6 @@ unsafe public class Main : MonoBehaviour {
 
 
     GameObject head;
-    GameObject interactionDotRight;
-    GameObject interactionDotLeft;
 
 
     GameObject[][][] cables;
@@ -330,9 +347,6 @@ unsafe public class Main : MonoBehaviour {
 
 
 
-    GameObject prefabFeaturePoint;
-    GameObject prefabCableSphere;
-    GameObject prefabCableCylinder; 
 
 
 
@@ -351,12 +365,23 @@ unsafe public class Main : MonoBehaviour {
 
     Vector3[] cable_positionsV3;
 
-    //sphere intersection
-    int rightSelectedNodeIndex   = -1;
-    int  leftSelectedNodeIndex   = -1;
-    int rightSelectedTargetIndex = -1;
-    int  leftSelectedTargetIndex = -1;
+    GameObject GAME_OBJECT_CREATE(String gameObjectName) {
+        return new GameObject(gameObjectName);
+    }
 
+    GameObject PREFAB_INSTANTIATE(GameObject prefab, String gameObjectName = null) {
+        GameObject result = GameObject.Instantiate(prefab);
+        result.name = (gameObjectName != null) ? gameObjectName : prefab.name;
+        return result;
+    }
+
+    GameObject PREFAB_LOAD(String resourceName, bool instantiate = false, String gameObjectName = null) {
+        GameObject result = (GameObject) Resources.Load(resourceName);
+        ASSERT(result != null);
+        if (instantiate) { result = PREFAB_INSTANTIATE(result); }
+        result.name = (gameObjectName != null) ? gameObjectName : resourceName;
+        return result;
+    }
 
 
     void Awake () {
@@ -365,13 +390,12 @@ unsafe public class Main : MonoBehaviour {
         // init(true);
         init(false);
 
-        prefabFeaturePoint = (GameObject) Resources.Load("PrefabFeaturePoint");
-        prefabCableSphere = (GameObject) Resources.Load("PrefabCableSphere");
-        prefabCableCylinder = (GameObject) Resources.Load("PrefabCableCylinder");
-
-        interactionDotLeft = GameObject.Find("InteractionDotLeft");
+        prefabFeaturePoint  = PREFAB_LOAD("prefabFeaturePoint");
+        prefabCableSphere   = PREFAB_LOAD("prefabCableSphere");
+        prefabCableCylinder = PREFAB_LOAD("prefabCableCylinder");
+        interactionDotLeft  = PREFAB_LOAD("prefabInteractionDot", true, "interactionDotLeft");
+        interactionDotRight = PREFAB_LOAD("prefabInteractionDot", true, "interactionDotRight");
         interactionDotLeft.SetActive(false);
-        interactionDotRight = GameObject.Find("InteractionDotRight");
         interactionDotRight.SetActive(false);
 
         TargetAwake();
@@ -395,7 +419,7 @@ unsafe public class Main : MonoBehaviour {
         if (JIM_AUTOMATED_TEST) {
             ViewSet(VIEW_CABLES);
             state = STATE_TARGET_DRAGGING;
-            CastRayWrapper(new Vector3(0.0f, -0.6f, -1.0f), new Vector3(0.0f, 0.0f, 1.0f), true);
+            CastRayWrapper(new Vector3(0.0f, -0.4f, -1.0f), new Vector3(0.0f, 0.0f, 1.0f), true);
         }
     }
 

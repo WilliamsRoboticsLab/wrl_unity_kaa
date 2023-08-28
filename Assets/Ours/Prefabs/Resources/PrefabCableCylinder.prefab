@@ -13,7 +13,7 @@ GameObject:
   - component: {fileID: 109602464771722649}
   - component: {fileID: 109602464771722648}
   m_Layer: 0
-  m_Name: PrefabCableCylinder
+  m_Name: prefabCableCylinder
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

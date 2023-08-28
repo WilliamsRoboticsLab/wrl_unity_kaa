@@ -196,9 +196,13 @@ unsafe public class Main : MonoBehaviour {
 
 
 
-    NativeArray<float> _castRayIntersectionPosition;
-    bool CastRayWrapper(Vector3 rayOrigin, Vector3 rayDirection, bool pleaseSetFeaturePoint) {
-        bool result = castRay(
+    class CastRayResult {
+        public bool hit;
+        public Vector3 intersectionPosition;
+    }
+    CastRayResult CastRayWrapper(Vector3 rayOrigin, Vector3 rayDirection, bool pleaseSetFeaturePoint) {
+        CastRayResult result = new CastRayResult();
+        result.hit = castRay(
                 rayOrigin.x,
                 rayOrigin.y,
                 rayOrigin.z,
@@ -208,13 +212,15 @@ unsafe public class Main : MonoBehaviour {
                 NativeArrayUnsafeUtility.GetUnsafePtr(_castRayIntersectionPosition),
                 pleaseSetFeaturePoint,
                 widgetNumberOfActiveWidgets);
-        if (pleaseSetFeaturePoint) {
-            if (result) {
-                WidgetActivate(new Vector3(_castRayIntersectionPosition[0], _castRayIntersectionPosition[1], _castRayIntersectionPosition[2]));
+        if (result.hit) {
+            result.intersectionPosition = new Vector3(_castRayIntersectionPosition[0], _castRayIntersectionPosition[1], _castRayIntersectionPosition[2]);
+            if (pleaseSetFeaturePoint) {
+                WidgetActivate(result.intersectionPosition);
             }
         }
         return result;
     }
+    NativeArray<float> _castRayIntersectionPosition;
 
 
     GameObject widgetWidgetsParentObject;
@@ -421,16 +427,14 @@ unsafe public class Main : MonoBehaviour {
         // init(true);
         init(false);
 
-        prefabCableSphere   = PREFAB_LOAD("prefabCableSphere");
-        prefabCableCylinder = PREFAB_LOAD("prefabCableCylinder");
 
         WidgetAwake();
 
-        { // castRay
+        { // CastRayAwake
             _castRayIntersectionPosition = new NativeArray<float>(3, Allocator.Persistent);
         }
 
-        { // interactionDot*
+        { // InteractionDotAwake
             GameObject prefabInteractionDot = PREFAB_LOAD("prefabInteractionDot");
             GameObject interactionDotsParentObject = GAME_OBJECT_CREATE("interactionDotsParentObject");
             interactionDotLeft  = PREFAB_INSTANTIATE(prefabInteractionDot, "interactionDotLeft", interactionDotsParentObject);
@@ -440,11 +444,15 @@ unsafe public class Main : MonoBehaviour {
         }
 
 
+        { // CableAwake
+            prefabCableSphere   = PREFAB_LOAD("prefabCableSphere");
+            prefabCableCylinder = PREFAB_LOAD("prefabCableCylinder");
+            cables = CablesInit();
+        }
 
         dragonMeshManager = new DragonMeshManager(dragon_head, dragon_body);
         dragonMeshManager.SetUpAll();
 
-        cables = CablesInit();
 
         SolveWrapper(); 
 
@@ -492,15 +500,15 @@ unsafe public class Main : MonoBehaviour {
 
         { // interactionDotLeft, interactionDotRight
             {
-                bool hit = CastRayWrapper(inputLeftRayOrigin, inputLeftRayDirection, false);
-                interactionDotLeft.SetActive(hit);
-                if (hit) { interactionDotLeft.transform.position = new Vector3(_castRayIntersectionPosition[0], _castRayIntersectionPosition[1], _castRayIntersectionPosition[2]); }
+                CastRayResult castRayResult = CastRayWrapper(inputLeftRayOrigin, inputLeftRayDirection, false);
+                interactionDotLeft.SetActive(castRayResult.hit);
+                if (castRayResult.hit) { interactionDotLeft.transform.position = castRayResult.intersectionPosition; }
             }
 
             {
-                bool hit = CastRayWrapper(inputRightRayOrigin, inputRightRayDirection, false);
-                interactionDotRight.SetActive(hit);
-                if (hit) { interactionDotRight.transform.position = new Vector3(_castRayIntersectionPosition[0], _castRayIntersectionPosition[1], _castRayIntersectionPosition[2]); }
+                CastRayResult castRayResult = CastRayWrapper(inputRightRayOrigin, inputRightRayDirection, false);
+                interactionDotRight.SetActive(castRayResult.hit);
+                if (castRayResult.hit) { interactionDotRight.transform.position = castRayResult.intersectionPosition; }
             }
         }
 

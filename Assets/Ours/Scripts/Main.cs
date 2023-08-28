@@ -20,6 +20,13 @@ using UnityEngine.Rendering;
 
 [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
 unsafe public class Main : MonoBehaviour {
+
+
+    bool JIM_AUTOMATED_TEST_JIM_AUTOMATED_TEST = true;
+    bool JIM_AUTOMATED_TEST_SINUSOIDS = false;
+
+
+
     void ASSERT(bool b) {
         if (!b) {
             Debug.Log("[ASSERT]");
@@ -28,7 +35,35 @@ unsafe public class Main : MonoBehaviour {
         }
     }
 
-    bool JIM_AUTOMATED_TEST = true;
+
+    // NOTE: I don't use any scripts except this script
+    void GAME_OBJECT_SET_CHILDS_PARENT(GameObject childGameObject, GameObject parentGameObject) {
+        childGameObject.transform.parent = parentGameObject.transform;
+    }
+    GameObject GAME_OBJECT_CREATE(String gameObjectName, GameObject parentGameObject = null) {
+        GameObject result = new GameObject(gameObjectName);
+        if (parentGameObject != null) GAME_OBJECT_SET_CHILDS_PARENT(result, parentGameObject);
+        return result;
+    }
+    GameObject PREFAB_INSTANTIATE(GameObject prefab, String gameObjectName = null, GameObject parentGameObject = null) {
+        GameObject result = GameObject.Instantiate(prefab);
+        ASSERT(result != null);
+        result.name = (gameObjectName != null) ? gameObjectName : prefab.name;
+        if (parentGameObject != null) GAME_OBJECT_SET_CHILDS_PARENT(result, parentGameObject);
+        return result;
+    }
+    GameObject PREFAB_LOAD(String resourceName) {
+        GameObject result = (GameObject) Resources.Load(resourceName);
+        ASSERT(result != null);
+        return result;
+    }
+    void GAME_OBJECT_DRAW(GameObject gameObject, bool draw) {
+        gameObject.SetActive(draw);
+    }
+    void GAME_OBJECT_SET_POSITION(GameObject gameObject, Vector3 position) {
+        gameObject.transform.position = position;
+    }
+
 
     bool inputPressedA;
     bool inputPressedB;
@@ -137,14 +172,13 @@ unsafe public class Main : MonoBehaviour {
     }
 
 
-    GameObject prefabFeaturePoint;
     GameObject prefabCableSphere;
     GameObject prefabCableCylinder; 
     GameObject interactionDotLeft;
     GameObject interactionDotRight;
 
     bool solving;
-    bool drawDragon;
+    // bool drawDragon;
 
     // transform.GetComponent<MeshRenderer>().enabled = !showDragon;
     // dragon_head.transform.GetComponent<SkinnedMeshRenderer>().enabled = showDragon;
@@ -166,60 +200,100 @@ unsafe public class Main : MonoBehaviour {
                 rayDirection.z,
                 NativeArrayUnsafeUtility.GetUnsafePtr(_castRayIntersectionPosition),
                 pleaseSetFeaturePoint,
-                targetNumTargets);
+                widgetNumWidgets);
         if (pleaseSetFeaturePoint) {
             if (result) {
-                TargetSpawn(new Vector3(_castRayIntersectionPosition[0], _castRayIntersectionPosition[1], _castRayIntersectionPosition[2]));
+                WidgetActivate(new Vector3(_castRayIntersectionPosition[0], _castRayIntersectionPosition[1], _castRayIntersectionPosition[2]));
             }
         }
         return result;
     }
 
 
-    GameObject targetTargetsParentObject;
-    int targetNumTargets;
-    int targetMaxNumberOfTargets;
-    GameObject[] targetGameObjects;
-    GameObject[] featurePointGameObjects;
-    NativeArray<int> _targetEnabled;
-    NativeArray<float3> _targetTargetPositions;
-    NativeArray<float3> _targetFeaturePointPositions; 
-    void TargetAwake() {
-        targetTargetsParentObject = GameObject.Find("widgets");
-        targetNumTargets = 0;
-        targetMaxNumberOfTargets = targetTargetsParentObject.transform.childCount;
-        targetGameObjects = new GameObject[targetMaxNumberOfTargets];
-        for (int i = 0; i < targetTargetsParentObject.transform.childCount; ++i) {
-            targetGameObjects[i] = targetTargetsParentObject.transform.GetChild(i).gameObject;
+    GameObject widgetWidgetsParentObject;
+    int widgetNumWidgets;
+    int widgetMaximumNumberOfWidgets;
+    GameObject[] widgetWidgetsGameObjects;
+    GameObject[] widgetTargetGameObjects;
+    GameObject[] widgetFeaturePointGameObjects;
+    NativeArray<int> _widgetTargetEnabled;
+    NativeArray<float3> _widgetTargetPositions;
+    NativeArray<float3> _widgetFeaturePointPositions; 
+    void WidgetAwake() {
+        widgetWidgetsParentObject = GAME_OBJECT_CREATE("widgetWidgetsParentObject");
+        widgetNumWidgets = 0;
+        widgetMaximumNumberOfWidgets = 16;
+        widgetWidgetsGameObjects = new GameObject[widgetMaximumNumberOfWidgets];
+        for (int i = 0; i < widgetMaximumNumberOfWidgets; ++i) {
+            widgetWidgetsGameObjects[i] = GAME_OBJECT_CREATE("widget " + i, widgetWidgetsParentObject);
+            GAME_OBJECT_DRAW(widgetWidgetsGameObjects[i], false);
         }
-        featurePointGameObjects = new GameObject[targetMaxNumberOfTargets];
-
-        _targetEnabled = new NativeArray<int>(targetMaxNumberOfTargets, Allocator.Persistent);
-        _targetTargetPositions = new NativeArray<float3>(targetMaxNumberOfTargets, Allocator.Persistent);
-        _targetFeaturePointPositions = new NativeArray<float3>(targetMaxNumberOfTargets, Allocator.Persistent);
+        widgetTargetGameObjects = new GameObject[widgetMaximumNumberOfWidgets];
+        for (int i = 0; i < widgetMaximumNumberOfWidgets; ++i) {
+            GameObject _FORNOW_prefabAustin = PREFAB_LOAD("prefabAustin");
+            widgetTargetGameObjects[i] = PREFAB_INSTANTIATE(_FORNOW_prefabAustin, "target " + i, widgetWidgetsGameObjects[i]);
+        }
+        widgetFeaturePointGameObjects = new GameObject[widgetMaximumNumberOfWidgets];
+        for (int i = 0; i < widgetMaximumNumberOfWidgets; ++i) {
+            GameObject prefabFeaturePoint  = PREFAB_LOAD("prefabFeaturePoint");
+            widgetFeaturePointGameObjects[i] = PREFAB_INSTANTIATE(prefabFeaturePoint, "featurePoint " + i, widgetWidgetsGameObjects[i]);
+        }
+        _widgetTargetEnabled = new NativeArray<int>(widgetMaximumNumberOfWidgets, Allocator.Persistent);
+        _widgetTargetPositions = new NativeArray<float3>(widgetMaximumNumberOfWidgets, Allocator.Persistent);
+        _widgetFeaturePointPositions = new NativeArray<float3>(widgetMaximumNumberOfWidgets, Allocator.Persistent);
     }
-    void TargetSpawn(Vector3 position) {
-        targetGameObjects[targetNumTargets].transform.position = position;
-        targetGameObjects[targetNumTargets].SetActive(true);
+    void WidgetActivate(Vector3 position) {
+        GAME_OBJECT_DRAW(widgetWidgetsGameObjects[widgetNumWidgets], true);
+        GAME_OBJECT_SET_POSITION(widgetTargetGameObjects[widgetNumWidgets], position);
+        GAME_OBJECT_SET_POSITION(widgetFeaturePointGameObjects[widgetNumWidgets], position);
+        widgetNumWidgets++;
+    }
+    // TODO: WidgetDeactivateWidget(int i)
 
-        featurePointGameObjects[targetNumTargets] = PREFAB_INSTANTIATE(prefabFeaturePoint, "featurePoint");
-        featurePointGameObjects[targetNumTargets].transform.position = position;
 
-        foreach (Transform child in targetGameObjects[targetNumTargets].transform) {
-            if (child.name == "Lines") {
-                child.gameObject.SetActive(true);
-                foreach (Transform child2 in child) {
-                    child2.GetComponent<LineRendererWrapper>().head = featurePointGameObjects[targetNumTargets];
-                }
+    int specialInputLeftRayHotTargetIndex = -1;
+    int specialInputRightRayHotTargetIndex = -1;
+    bool specialInputLeftRayEnteredTarget;
+    bool specialInputRightRayEnteredTarget;
+    bool specialInputLeftRayExitedTarget;
+    bool specialInputRightRayExitedTarget; 
+    void SpecialInputUpdate() {
+        int leftTargetTemp = specialInputLeftRayHotTargetIndex;
+        int rightTargetTemp = specialInputRightRayHotTargetIndex; 
+        specialInputLeftRayHotTargetIndex = SpecialInputCastRayAtTargets(inputLeftRayOrigin, inputLeftRayDirection);
+        specialInputRightRayHotTargetIndex = SpecialInputCastRayAtTargets(inputRightRayOrigin, inputRightRayDirection);
+        specialInputLeftRayEnteredTarget  = ( leftTargetTemp == -1 &&  specialInputLeftRayHotTargetIndex != -1);
+        specialInputRightRayEnteredTarget = (rightTargetTemp == -1 && specialInputRightRayHotTargetIndex != -1);
+        specialInputLeftRayExitedTarget   = ResetColor( leftTargetTemp,  specialInputLeftRayHotTargetIndex);
+        specialInputRightRayExitedTarget  = ResetColor(rightTargetTemp, specialInputRightRayHotTargetIndex);
+    }
+    int SpecialInputCastRayAtTargets(Vector3 origin, Vector3 direction) {
+        float radius = 0.025f;
+        int result = -1;
+        for (int i = 0; i < widgetMaximumNumberOfWidgets; ++i) {
+            GameObject target = widgetTargetGameObjects[i];
+            if (!target.activeSelf) { continue; }
+
+            Vector3 center = target.transform.position;
+            Vector3 oc = origin - center;
+            float a = Vector3.Dot(direction, direction);
+            float half_b = Vector3.Dot(oc, direction);
+            float c = Vector3.Dot(oc, oc) - radius*radius;
+            float discriminant = half_b * half_b  - a*c;
+            if (discriminant > 0) {
+                if (result == -1) result = i;
+                else if ((oc.magnitude < (origin - widgetTargetGameObjects[result].transform.position).magnitude)) result = i;
             }
+
+            // target.transform.GetComponent<Rigidbody>().velocity = new Vector3(0.0f, 0.0f, 0.0f);
+            // target.transform.position = new Vector3(
+            //         Mathf.Clamp(target.transform.position.x, -2.0f, 2.0f),
+            //         Mathf.Clamp(target.transform.position.y, -2.0f, 2.0f), 
+            //         Mathf.Clamp(target.transform.position.z, -2.0f, 2.0f)
+            //         );
         }
-
-        targetNumTargets++;
+        return result;
     }
-
-    //sphere intersection
-    int rightSelectedTargetIndex = -1;
-    int  leftSelectedTargetIndex = -1;
 
 
     [DllImport("kernel32", SetLastError = true, CharSet = CharSet.Unicode)]
@@ -315,34 +389,11 @@ unsafe public class Main : MonoBehaviour {
 
     // Vector3 node_pos;
     Color targetColor;
-
-
     NativeArray<int> num_vias; 
     NativeArray<float3> cable_positions;
     NativeArray<float> tensions;
-
     Vector3[] cable_positionsV3;
 
-    GameObject GAME_OBJECT_CREATE(String gameObjectName) {
-        return new GameObject(gameObjectName);
-    }
-
-    void GAME_OBJECT_SET_CHILDS_PARENT(GameObject childGameObject, GameObject parentGameObject) {
-        childGameObject.transform.parent = parentGameObject.transform;
-    }
-
-    GameObject PREFAB_INSTANTIATE(GameObject prefab, String gameObjectName = null) {
-        GameObject result = GameObject.Instantiate(prefab);
-        ASSERT(result != null);
-        result.name = (gameObjectName != null) ? gameObjectName : prefab.name;
-        return result;
-    }
-
-    GameObject PREFAB_LOAD(String resourceName) {
-        GameObject result = (GameObject) Resources.Load(resourceName);
-        ASSERT(result != null);
-        return result;
-    }
 
 
     void Awake () {
@@ -351,70 +402,62 @@ unsafe public class Main : MonoBehaviour {
         // init(true);
         init(false);
 
-        prefabFeaturePoint  = PREFAB_LOAD("prefabFeaturePoint");
         prefabCableSphere   = PREFAB_LOAD("prefabCableSphere");
         prefabCableCylinder = PREFAB_LOAD("prefabCableCylinder");
-        GameObject prefabInteractionDot = PREFAB_LOAD("prefabInteractionDot");
-        interactionDotLeft  = PREFAB_INSTANTIATE(prefabInteractionDot, "interactionDotLeft");
-        interactionDotRight = PREFAB_INSTANTIATE(prefabInteractionDot, "interactionDotRight");
-        interactionDotLeft.SetActive(false);
-        interactionDotRight.SetActive(false);
 
-        GameObject widgets = GAME_OBJECT_CREATE("widgets");
-        GameObject prefabWidget = PREFAB_LOAD("prefabWidget");
-        for (int i = 0; i < 16; ++i) {
-            GameObject gameObjectWidget = PREFAB_INSTANTIATE(prefabWidget, "widget " + i);
-            GAME_OBJECT_SET_CHILDS_PARENT(gameObjectWidget, widgets);
+        WidgetAwake();
+
+        { // castRay
+            _castRayIntersectionPosition = new NativeArray<float>(3, Allocator.Persistent);
         }
 
-        TargetAwake();
-
-
-        _castRayIntersectionPosition = new NativeArray<float>(3, Allocator.Persistent);
-
-
+        { // interactionDot*
+            GameObject prefabInteractionDot = PREFAB_LOAD("prefabInteractionDot");
+            GameObject interactionDotsParentObject = GAME_OBJECT_CREATE("interactionDotsParentObject");
+            interactionDotLeft  = PREFAB_INSTANTIATE(prefabInteractionDot, "interactionDotLeft", interactionDotsParentObject);
+            interactionDotRight = PREFAB_INSTANTIATE(prefabInteractionDot, "interactionDotRight", interactionDotsParentObject);
+            interactionDotLeft.SetActive(false);
+            interactionDotRight.SetActive(false);
+        }
 
 
 
         dragonMeshManager = new DragonMeshManager(dragon_head, dragon_body);
         dragonMeshManager.SetUpAll();
+
         cables = InitCables();
+
         SolveWrapper(); 
 
 
-        if (JIM_AUTOMATED_TEST) {
+        if (JIM_AUTOMATED_TEST_JIM_AUTOMATED_TEST) {
             solving = true;
-            drawDragon = false;
             CastRayWrapper(new Vector3(0.0f, -0.4f, -1.0f), new Vector3(0.0f, 0.0f, 1.0f), true);
+            if (!JIM_AUTOMATED_TEST_SINUSOIDS) {
+                widgetTargetGameObjects[0].transform.position = new Vector3(
+                        0.2f,
+                        widgetTargetGameObjects[0].transform.position.y,
+                        widgetTargetGameObjects[0].transform.position.z
+                        );
+            }
         }
     }
 
     float jimTime = 0.0f;
     void Update () {
-        if (JIM_AUTOMATED_TEST) {
+        if (JIM_AUTOMATED_TEST_JIM_AUTOMATED_TEST) {
             jimTime += 0.0167f;
-            targetGameObjects[0].transform.position = new Vector3(
-                    0.2f * Mathf.Sin(5 * jimTime),
-                    targetGameObjects[0].transform.position.y,
-                    targetGameObjects[0].transform.position.z
-                    );
+            if (JIM_AUTOMATED_TEST_SINUSOIDS) {
+                widgetTargetGameObjects[0].transform.position = new Vector3(
+                        0.2f * Mathf.Sin(5 * jimTime),
+                        widgetTargetGameObjects[0].transform.position.y,
+                        widgetTargetGameObjects[0].transform.position.z
+                        );
+            }
         }
 
         InputUpdate();
-        bool leftRayEnteredTarget;
-        bool rightRayEnteredTarget;
-        bool leftRayExitedTarget;
-        bool rightRayExitedTarget; 
-        {
-            int  leftTargetTemp =  leftSelectedTargetIndex;
-            int rightTargetTemp = rightSelectedTargetIndex; 
-            leftSelectedTargetIndex = SphereCast(inputLeftRayOrigin,   inputLeftRayDirection,  false);
-            rightSelectedTargetIndex = SphereCast(inputRightRayOrigin, inputRightRayDirection, false);
-            leftRayEnteredTarget  = ( leftTargetTemp == -1 &&  leftSelectedTargetIndex != -1);
-            rightRayEnteredTarget = (rightTargetTemp == -1 && rightSelectedTargetIndex != -1);
-            leftRayExitedTarget   = ResetColor( leftTargetTemp,  leftSelectedTargetIndex);
-            rightRayExitedTarget  = ResetColor(rightTargetTemp, rightSelectedTargetIndex);
-        }
+        SpecialInputUpdate();
 
         if (solving) {
             SolveWrapper();
@@ -445,8 +488,8 @@ unsafe public class Main : MonoBehaviour {
             } else if (inputPressedRightTrigger) {
                 CastRayWrapper(inputRightRayOrigin, inputRightRayDirection, true);
             } else {
-                if (leftRayEnteredTarget ) { UnityEngine.XR.InputDevices.GetDeviceAtXRNode(UnityEngine.XR.XRNode. LeftHand).SendHapticImpulse(0, 0.3f, 0.15f); }
-                if (rightRayEnteredTarget) { UnityEngine.XR.InputDevices.GetDeviceAtXRNode(UnityEngine.XR.XRNode.RightHand).SendHapticImpulse(0, 0.3f, 0.15f); }
+                if (specialInputLeftRayEnteredTarget ) { UnityEngine.XR.InputDevices.GetDeviceAtXRNode(UnityEngine.XR.XRNode. LeftHand).SendHapticImpulse(0, 0.3f, 0.15f); }
+                if (specialInputRightRayEnteredTarget) { UnityEngine.XR.InputDevices.GetDeviceAtXRNode(UnityEngine.XR.XRNode.RightHand).SendHapticImpulse(0, 0.3f, 0.15f); }
             }
         }
     }
@@ -471,27 +514,27 @@ unsafe public class Main : MonoBehaviour {
         }
 
         {
-            for (int k = 0; k < targetMaxNumberOfTargets; k++){
-                _targetEnabled[k] = (targetGameObjects[k].activeSelf) ? 1 : 0;
-                _targetTargetPositions[k] = new float3(targetGameObjects[k].transform.position.x, targetGameObjects[k].transform.position.y, targetGameObjects[k].transform.position.z);
+            for (int k = 0; k < widgetMaximumNumberOfWidgets; k++){
+                _widgetTargetEnabled[k] = (widgetTargetGameObjects[k].activeSelf) ? 1 : 0;
+                _widgetTargetPositions[k] = new float3(widgetTargetGameObjects[k].transform.position.x, widgetTargetGameObjects[k].transform.position.y, widgetTargetGameObjects[k].transform.position.z);
             }
         }
 
         var simulationMeshPositions = (float3 *) NativeArrayUnsafeUtility.GetUnsafePtr(meshData.GetVertexData<float3>(0));
 
         solve(
-                targetMaxNumberOfTargets,
-                NativeArrayUnsafeUtility.GetUnsafePtr(_targetEnabled),
-                NativeArrayUnsafeUtility.GetUnsafePtr(_targetTargetPositions),
+                widgetMaximumNumberOfWidgets,
+                NativeArrayUnsafeUtility.GetUnsafePtr(_widgetTargetEnabled),
+                NativeArrayUnsafeUtility.GetUnsafePtr(_widgetTargetPositions),
                 simulationMeshPositions,
                 NativeArrayUnsafeUtility.GetUnsafePtr(meshData.GetVertexData<float3>(1)),
                 NativeArrayUnsafeUtility.GetUnsafePtr(meshData.GetIndexData<int>()),
-                NativeArrayUnsafeUtility.GetUnsafePtr(_targetFeaturePointPositions));
+                NativeArrayUnsafeUtility.GetUnsafePtr(_widgetFeaturePointPositions));
 
 
 
-        for(int k = 0; k < targetNumTargets; k++){
-            featurePointGameObjects[k].transform.position = _targetFeaturePointPositions[k];
+        for(int k = 0; k < widgetNumWidgets; k++){
+            widgetFeaturePointGameObjects[k].transform.position = _widgetFeaturePointPositions[k];
         }
 
 
@@ -511,7 +554,7 @@ unsafe public class Main : MonoBehaviour {
 
     bool ResetColor(int tempIndex, int curIndex){
         if(tempIndex != -1 && curIndex == -1) {
-            featurePointGameObjects[tempIndex].transform.GetComponent<MeshRenderer>().material.SetColor("_Color", targetColor);
+            widgetFeaturePointGameObjects[tempIndex].transform.GetComponent<MeshRenderer>().material.SetColor("_Color", targetColor);
             return true;
         }
         return false;
@@ -594,38 +637,7 @@ unsafe public class Main : MonoBehaviour {
         cylinderAndCaps[2].transform.localScale = localScale;
     }
 
-    int SphereCast(Vector3 origin, Vector3 direction, bool nodeOrTarget) {
-        float radius = 0.025f;
-        int indexToReturn = -1;
-        for (int index = 0; index < (nodeOrTarget ? targetGameObjects.Length : (targetNumTargets)); ++index) {
-            GameObject target = nodeOrTarget ? targetGameObjects[index] : featurePointGameObjects[index];
-            if (!target.activeSelf) { continue; }
 
-            Vector3 center = target.transform.position;
-            Vector3 oc = origin - center;
-            float a = Vector3.Dot(direction, direction);
-            float half_b = Vector3.Dot(oc, direction);
-            float c = Vector3.Dot(oc, oc) - radius*radius;
-            float discriminant = half_b * half_b  - a*c;
-            if(discriminant > 0) {
-                if (indexToReturn == -1) indexToReturn = index;
-                else if((oc.magnitude < (origin - targetGameObjects[indexToReturn].transform.position).magnitude)) indexToReturn = index;
-            }
-            if(nodeOrTarget) Clamp(target);
-        }
-        return indexToReturn;
-    }
-
-    void Clamp(GameObject target){
-        target.transform.GetComponent<Rigidbody>().velocity = new Vector3(0.0f, 0.0f, 0.0f);
-        Vector3 new_pos = new Vector3(
-                Mathf.Clamp(target.transform.position.x, -2.0f, 2.0f),
-                Mathf.Clamp(target.transform.position.y, -2.0f, 2.0f), 
-                Mathf.Clamp(target.transform.position.z, -2.0f, 2.0f)
-                );
-
-        target.transform.position = new_pos;
-    }
 
     void OnApplicationQuit () {
         { // FORNOW: uber sketchy delay because solve may not have finished writing data allocated by C# and if we quit out and then it writes we crash unity
@@ -638,9 +650,9 @@ unsafe public class Main : MonoBehaviour {
 
         _castRayIntersectionPosition.Dispose();
 
-        _targetEnabled.Dispose();
-        _targetTargetPositions.Dispose();
-        _targetFeaturePointPositions.Dispose(); 
+        _widgetTargetEnabled.Dispose();
+        _widgetTargetPositions.Dispose();
+        _widgetFeaturePointPositions.Dispose(); 
 
         num_vias.Dispose();
         cable_positions.Dispose();
@@ -885,23 +897,23 @@ unsafe public class DragonMeshManager {
 // TODO
 
 
-// if (leftSelectedTargetIndex != -1 || rightSelectedTargetIndex != -1) { 
-//     featurePointGameObjects[leftSelectedTargetIndex != -1 ? leftSelectedTargetIndex : rightSelectedTargetIndex].transform.GetComponent<MeshRenderer>().material.SetColor("_Color", Color.blue);
+// if (specialInputLeftRayHotTargetIndex != -1 || specialInputRightRayHotTargetIndex != -1) { 
+//     widgetFeaturePointGameObjects[specialInputLeftRayHotTargetIndex != -1 ? specialInputLeftRayHotTargetIndex : specialInputRightRayHotTargetIndex].transform.GetComponent<MeshRenderer>().material.SetColor("_Color", Color.blue);
 // }
 
 // } else if(inputPressedY || inputPressedB) {
-//     TargetAwake();
+//     WidgetAwake();
 //     reset();
-//     for(int k = 0; k < targetMaxNumberOfTargets; k++){
-//         if (featurePointGameObjects[k] != null) {
-//             Destroy(featurePointGameObjects[k]);
+//     for(int k = 0; k < widgetMaximumNumberOfWidgets; k++){
+//         if (widgetFeaturePointGameObjects[k] != null) {
+//             Destroy(widgetFeaturePointGameObjects[k]);
 //         }
 //     }
 //     SolveWrapper(); 
 //     UpdateCables();
 //     state = STATE_START;         
 
-// foreach (GameObject target in targetGameObjects) {
+// foreach (GameObject target in widgetTargetGameObjects) {
 //     if (target != null) {
 //         target.GetComponent<MeshRenderer>().enabled = showUI;
 //         foreach(Transform child in target.transform) {
@@ -910,6 +922,15 @@ unsafe public class DragonMeshManager {
 //                     child2.GetComponent<LineRenderer>().enabled = showUI;
 //                 }
 //             }
+//         }
+//     }
+// }
+
+// foreach (Transform child in widgetTargetGameObjects[widgetNumWidgets].transform) {
+//     if (child.name == "Lines") {
+//         child.gameObject.SetActive(true);
+//         foreach (Transform child2 in child) {
+//             child2.GetComponent<LineRendererWrapper>().head = widgetFeaturePointGameObjects[widgetNumWidgets];
 //         }
 //     }
 // }

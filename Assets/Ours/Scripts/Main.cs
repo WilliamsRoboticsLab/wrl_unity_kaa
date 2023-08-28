@@ -143,53 +143,15 @@ unsafe public class Main : MonoBehaviour {
     GameObject interactionDotLeft;
     GameObject interactionDotRight;
 
+    bool solving;
+    bool drawDragon;
 
-    // TODO: get rid of view set (once there's a simple pass through activating and deactivating game objects)
-    // TODO: just have two booleans viewShowDragon, viewShowMemories
-    const int VIEW_SNAKE    = 0;
-    const int VIEW_CABLES   = 1;
-    const int VIEW_ALL      = 2; 
-    const int VIEW_DRAGON   = 3;
-    const int VIEW_MEMORIES = 4;
-    const int _VIEW_COUNT   = 5;
-    int _view;
-    void ViewCycle() { ViewSet((_view + 1) % _VIEW_COUNT); }
-    void ViewSet(int view) {
-        _view = view;
-        bool showUI = (_view < VIEW_DRAGON);
-        bool showDragon = (_view != VIEW_SNAKE && _view != VIEW_CABLES);
-        bool showCables = (_view == VIEW_CABLES);
-
-        foreach (GameObject featurePoint in featurePointGameObjects) {
-            if (featurePoint != null) featurePoint.GetComponent<MeshRenderer>().enabled = showUI;
-        }
-        foreach (GameObject target in targetGameObjects) {
-            if (target != null) {
-                target.GetComponent<MeshRenderer>().enabled = showUI;
-                foreach(Transform child in target.transform) {
-                    if(child.name == "Lines") {
-                        foreach(Transform child2 in child){
-                            child2.GetComponent<LineRenderer>().enabled = showUI;
-                        }
-                    }
-                }
-            }
-        }
-
-        transform.GetComponent<MeshRenderer>().enabled = !showDragon;
-        cablesParentObject.SetActive(showCables);
-        dragon_head.transform.GetComponent<SkinnedMeshRenderer>().enabled = showDragon;
-        dragon_body.transform.GetComponent<SkinnedMeshRenderer>().enabled = showDragon;
-    }
+    // transform.GetComponent<MeshRenderer>().enabled = !showDragon;
+    // dragon_head.transform.GetComponent<SkinnedMeshRenderer>().enabled = showDragon;
+    // dragon_body.transform.GetComponent<SkinnedMeshRenderer>().enabled = showDragon;
 
 
 
-    int STATE_START           = 0;
-    int STATE_NODE_DRAGGING   = 1;
-    int STATE_TARGET_DRAGGING = 2;
-    int STATE_RELAX           = 3;
-    int STATE_STATIC          = 4;
-    int state;
 
 
 
@@ -214,21 +176,16 @@ unsafe public class Main : MonoBehaviour {
     }
 
 
-    // // Targets -> Widgets
-
-    // prefabWidget
-
-    // class Widget {
-    //
-    // }
-
     GameObject targetTargetsParentObject;
     int targetNumTargets;
     int targetMaxNumberOfTargets;
     GameObject[] targetGameObjects;
     GameObject[] featurePointGameObjects;
+    NativeArray<int> _targetEnabled;
+    NativeArray<float3> _targetTargetPositions;
+    NativeArray<float3> _targetFeaturePointPositions; 
     void TargetAwake() {
-        targetTargetsParentObject = GameObject.Find("Targets");
+        targetTargetsParentObject = GameObject.Find("widgets");
         targetNumTargets = 0;
         targetMaxNumberOfTargets = targetTargetsParentObject.transform.childCount;
         targetGameObjects = new GameObject[targetMaxNumberOfTargets];
@@ -236,6 +193,10 @@ unsafe public class Main : MonoBehaviour {
             targetGameObjects[i] = targetTargetsParentObject.transform.GetChild(i).gameObject;
         }
         featurePointGameObjects = new GameObject[targetMaxNumberOfTargets];
+
+        _targetEnabled = new NativeArray<int>(targetMaxNumberOfTargets, Allocator.Persistent);
+        _targetTargetPositions = new NativeArray<float3>(targetMaxNumberOfTargets, Allocator.Persistent);
+        _targetFeaturePointPositions = new NativeArray<float3>(targetMaxNumberOfTargets, Allocator.Persistent);
     }
     void TargetSpawn(Vector3 position) {
         targetGameObjects[targetNumTargets].transform.position = position;
@@ -257,8 +218,6 @@ unsafe public class Main : MonoBehaviour {
     }
 
     //sphere intersection
-    int rightSelectedNodeIndex   = -1;
-    int  leftSelectedNodeIndex   = -1;
     int rightSelectedTargetIndex = -1;
     int  leftSelectedTargetIndex = -1;
 
@@ -357,7 +316,6 @@ unsafe public class Main : MonoBehaviour {
     // Vector3 node_pos;
     Color targetColor;
 
-    NativeArray<float3> posOnSnake; 
 
     NativeArray<int> num_vias; 
     NativeArray<float3> cable_positions;
@@ -405,31 +363,28 @@ unsafe public class Main : MonoBehaviour {
         GameObject widgets = GAME_OBJECT_CREATE("widgets");
         GameObject prefabWidget = PREFAB_LOAD("prefabWidget");
         for (int i = 0; i < 16; ++i) {
-            GameObject widget = PREFAB_INSTANTIATE(prefabWidget, "widget " + i);
-            GAME_OBJECT_SET_CHILDS_PARENT(widget, widgets);
+            GameObject gameObjectWidget = PREFAB_INSTANTIATE(prefabWidget, "widget " + i);
+            GAME_OBJECT_SET_CHILDS_PARENT(gameObjectWidget, widgets);
         }
 
         TargetAwake();
 
 
         _castRayIntersectionPosition = new NativeArray<float>(3, Allocator.Persistent);
-        posOnSnake = new NativeArray<float3>(targetMaxNumberOfTargets, Allocator.Persistent);
 
 
 
-        targetColor = prefabFeaturePoint.transform.GetComponent<MeshRenderer>().sharedMaterial.GetColor("_Color");
 
 
         dragonMeshManager = new DragonMeshManager(dragon_head, dragon_body);
         dragonMeshManager.SetUpAll();
         cables = InitCables();
-        cablesParentObject.SetActive(false);
         SolveWrapper(); 
 
 
         if (JIM_AUTOMATED_TEST) {
-            ViewSet(VIEW_CABLES);
-            state = STATE_TARGET_DRAGGING;
+            solving = true;
+            drawDragon = false;
             CastRayWrapper(new Vector3(0.0f, -0.4f, -1.0f), new Vector3(0.0f, 0.0f, 1.0f), true);
         }
     }
@@ -446,35 +401,29 @@ unsafe public class Main : MonoBehaviour {
         }
 
         InputUpdate();
-
-        //find any sphere interactions  
-        bool rightEnteredTarget;
-        bool  leftEnteredTarget;
-        bool rightLeaveTarget; 
-        bool  leftLeaveTarget;
+        bool leftRayEnteredTarget;
+        bool rightRayEnteredTarget;
+        bool leftRayExitedTarget;
+        bool rightRayExitedTarget; 
         {
-            int rightTargetTemp = rightSelectedTargetIndex; 
             int  leftTargetTemp =  leftSelectedTargetIndex;
-
-            rightSelectedNodeIndex   = SphereCast(inputRightRayOrigin, inputRightRayDirection, true);
-            leftSelectedNodeIndex   = SphereCast(inputLeftRayOrigin,   inputLeftRayDirection, true);
+            int rightTargetTemp = rightSelectedTargetIndex; 
+            leftSelectedTargetIndex = SphereCast(inputLeftRayOrigin,   inputLeftRayDirection,  false);
             rightSelectedTargetIndex = SphereCast(inputRightRayOrigin, inputRightRayDirection, false);
-            leftSelectedTargetIndex = SphereCast(inputLeftRayOrigin,   inputLeftRayDirection, false);
-
-            rightEnteredTarget = (rightTargetTemp == -1 && rightSelectedTargetIndex != -1);
-            leftEnteredTarget = ( leftTargetTemp == -1 &&  leftSelectedTargetIndex != -1);
-            rightLeaveTarget  = ResetColor(rightTargetTemp, rightSelectedTargetIndex);
-            leftLeaveTarget  = ResetColor( leftTargetTemp,  leftSelectedTargetIndex);
+            leftRayEnteredTarget  = ( leftTargetTemp == -1 &&  leftSelectedTargetIndex != -1);
+            rightRayEnteredTarget = (rightTargetTemp == -1 && rightSelectedTargetIndex != -1);
+            leftRayExitedTarget   = ResetColor( leftTargetTemp,  leftSelectedTargetIndex);
+            rightRayExitedTarget  = ResetColor(rightTargetTemp, rightSelectedTargetIndex);
         }
 
-        if (state == STATE_TARGET_DRAGGING || state == STATE_NODE_DRAGGING || state == STATE_RELAX) {
+        if (solving) {
             SolveWrapper();
             UpdateCables();
         }
 
         dragonMeshManager.UpdateAll();
 
-        { //interaction dots
+        { // interactionDotLeft, interactionDotRight
             {
                 bool hit = CastRayWrapper(inputLeftRayOrigin, inputLeftRayDirection, false);
                 interactionDotLeft.SetActive(hit);
@@ -488,58 +437,21 @@ unsafe public class Main : MonoBehaviour {
             }
         }
 
-        { //button control
-            if(inputPressedMenu) state = STATE_STATIC;
-            if(inputPressedLeftTrigger || inputPressedRightTrigger) {
-                if (inputPressedLeftTrigger) { CastRayWrapper(inputLeftRayOrigin, inputLeftRayDirection, true); }
-                if (inputPressedRightTrigger) { CastRayWrapper(inputRightRayOrigin, inputRightRayDirection, true); }
-            } else if(inputPressedY || inputPressedB) {
-                TargetAwake();
-                reset();
-                for(int k = 0; k < targetMaxNumberOfTargets; k++){
-                    if(featurePointGameObjects[k] != null) {
-                        Destroy(featurePointGameObjects[k]);
-                    }
-                }
-                SolveWrapper(); 
-                UpdateCables();
-                state = STATE_START;         
-            } else if (leftSelectedNodeIndex != -1 || rightSelectedNodeIndex != -1 || leftSelectedTargetIndex != -1 || rightSelectedTargetIndex != -1) {
-                bool nodeOrTarget = (leftSelectedNodeIndex != -1 || rightSelectedNodeIndex != -1);
-                bool left = nodeOrTarget ? (leftSelectedNodeIndex != -1) : (leftSelectedTargetIndex != -1);
-                //delete
-                if (nodeOrTarget && (left ? inputPressedX : inputPressedA)) { 
-                    foreach(Transform child in targetGameObjects[left ? leftSelectedNodeIndex : rightSelectedNodeIndex].transform) {
-                        if(child.name == "Lines") {
-                            foreach(Transform child2 in child){
-                                if(child2.GetComponent<LineRendererWrapper>().head != null) child2.GetComponent<LineRendererWrapper>().head.SetActive(false);
-                            }
-                        }
-                    }
-                    targetGameObjects[left ? leftSelectedNodeIndex : rightSelectedNodeIndex].SetActive(false);
-                    state = STATE_RELAX;
-                } else if (left ? inputPressedLeftGrip : inputPressedRightGrip) {
-                    state = nodeOrTarget ? STATE_NODE_DRAGGING : STATE_TARGET_DRAGGING;
-                } else if (left ? inputReleasedLeftGrip : inputReleasedRightGrip) {
-                    state = nodeOrTarget ? STATE_RELAX : STATE_STATIC;
-                }
-                //else state = nodeOrTarget ? STATE_RELAX : STATE_STATIC;
-            } //delete and drag <- I think there is a mistake here that is keeping it in relaxing mode when should be static
-
-            if(inputPressedLeftStick || Input.GetKeyDown("n")) { ViewCycle(); }
-
-            if(leftEnteredTarget || rightEnteredTarget) {
-                UnityEngine.XR.InputDevices.GetDeviceAtXRNode(leftEnteredTarget ? UnityEngine.XR.XRNode.LeftHand : UnityEngine.XR.XRNode.RightHand).SendHapticImpulse(0, 0.3f, 0.15f);
+        { // core UI
+            if (inputPressedMenu) {
+                solving = !solving;
+            } else if (inputPressedLeftTrigger) {
+                CastRayWrapper(inputLeftRayOrigin, inputLeftRayDirection, true);
+            } else if (inputPressedRightTrigger) {
+                CastRayWrapper(inputRightRayOrigin, inputRightRayDirection, true);
+            } else {
+                if (leftRayEnteredTarget ) { UnityEngine.XR.InputDevices.GetDeviceAtXRNode(UnityEngine.XR.XRNode. LeftHand).SendHapticImpulse(0, 0.3f, 0.15f); }
+                if (rightRayEnteredTarget) { UnityEngine.XR.InputDevices.GetDeviceAtXRNode(UnityEngine.XR.XRNode.RightHand).SendHapticImpulse(0, 0.3f, 0.15f); }
             }
-
-            if(leftSelectedTargetIndex != -1 || rightSelectedTargetIndex != -1) { 
-                featurePointGameObjects[leftSelectedTargetIndex != -1 ? leftSelectedTargetIndex : rightSelectedTargetIndex].transform.GetComponent<MeshRenderer>().material.SetColor("_Color", Color.blue);
-            }
-
         }
     }
 
-    void SolveWrapper(){
+    void SolveWrapper() {
 
         int triangleIndexCount = getNumTriangles() * 3; 
 
@@ -558,13 +470,10 @@ unsafe public class Main : MonoBehaviour {
             meshData.SetIndexBufferParams(triangleIndexCount, IndexFormat.UInt32);
         }
 
-        NativeArray<int> nativeBools = new NativeArray<int>(targetMaxNumberOfTargets, Allocator.Temp);
-        NativeArray<float3> nativeTargetPos = new NativeArray<float3>(targetMaxNumberOfTargets, Allocator.Temp);
         {
-            for(int k = 0; k < targetMaxNumberOfTargets; k++){
-                if (targetGameObjects[k].activeSelf) nativeBools[k] = 1;
-                else nativeBools[k] = 0;
-                nativeTargetPos[k] = new float3 (targetGameObjects[k].transform.position.x, targetGameObjects[k].transform.position.y, targetGameObjects[k].transform.position.z);
+            for (int k = 0; k < targetMaxNumberOfTargets; k++){
+                _targetEnabled[k] = (targetGameObjects[k].activeSelf) ? 1 : 0;
+                _targetTargetPositions[k] = new float3(targetGameObjects[k].transform.position.x, targetGameObjects[k].transform.position.y, targetGameObjects[k].transform.position.z);
             }
         }
 
@@ -572,19 +481,17 @@ unsafe public class Main : MonoBehaviour {
 
         solve(
                 targetMaxNumberOfTargets,
-                NativeArrayUnsafeUtility.GetUnsafePtr(nativeBools),
-                NativeArrayUnsafeUtility.GetUnsafePtr(nativeTargetPos),
+                NativeArrayUnsafeUtility.GetUnsafePtr(_targetEnabled),
+                NativeArrayUnsafeUtility.GetUnsafePtr(_targetTargetPositions),
                 simulationMeshPositions,
                 NativeArrayUnsafeUtility.GetUnsafePtr(meshData.GetVertexData<float3>(1)),
                 NativeArrayUnsafeUtility.GetUnsafePtr(meshData.GetIndexData<int>()),
-                NativeArrayUnsafeUtility.GetUnsafePtr(posOnSnake));
+                NativeArrayUnsafeUtility.GetUnsafePtr(_targetFeaturePointPositions));
 
-        nativeBools.Dispose();
-        nativeTargetPos.Dispose();
 
 
         for(int k = 0; k < targetNumTargets; k++){
-            featurePointGameObjects[k].transform.position = posOnSnake[k];
+            featurePointGameObjects[k].transform.position = _targetFeaturePointPositions[k];
         }
 
 
@@ -728,8 +635,13 @@ unsafe public class Main : MonoBehaviour {
         }
 
         FreeLibrary(library);
-        posOnSnake.Dispose(); 
+
         _castRayIntersectionPosition.Dispose();
+
+        _targetEnabled.Dispose();
+        _targetTargetPositions.Dispose();
+        _targetFeaturePointPositions.Dispose(); 
+
         num_vias.Dispose();
         cable_positions.Dispose();
         tensions.Dispose();
@@ -969,3 +881,35 @@ unsafe public class DragonMeshManager {
         }
     }
 }
+
+// TODO
+
+
+// if (leftSelectedTargetIndex != -1 || rightSelectedTargetIndex != -1) { 
+//     featurePointGameObjects[leftSelectedTargetIndex != -1 ? leftSelectedTargetIndex : rightSelectedTargetIndex].transform.GetComponent<MeshRenderer>().material.SetColor("_Color", Color.blue);
+// }
+
+// } else if(inputPressedY || inputPressedB) {
+//     TargetAwake();
+//     reset();
+//     for(int k = 0; k < targetMaxNumberOfTargets; k++){
+//         if (featurePointGameObjects[k] != null) {
+//             Destroy(featurePointGameObjects[k]);
+//         }
+//     }
+//     SolveWrapper(); 
+//     UpdateCables();
+//     state = STATE_START;         
+
+// foreach (GameObject target in targetGameObjects) {
+//     if (target != null) {
+//         target.GetComponent<MeshRenderer>().enabled = showUI;
+//         foreach(Transform child in target.transform) {
+//             if(child.name == "Lines") {
+//                 foreach(Transform child2 in child){
+//                     child2.GetComponent<LineRenderer>().enabled = showUI;
+//                 }
+//             }
+//         }
+//     }
+// }

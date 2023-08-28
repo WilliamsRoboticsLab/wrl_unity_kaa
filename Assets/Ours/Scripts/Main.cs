@@ -236,14 +236,18 @@ unsafe public class Main : MonoBehaviour {
             GAME_OBJECT_DRAW(widgetWidgetGameObjects[i], false);
         }
         widgetTargetGameObjects = new GameObject[widgetMaximumNumberOfActiveWidgets];
-        for (int i = 0; i < widgetMaximumNumberOfActiveWidgets; ++i) {
-            GameObject _FORNOW_prefabAustin = PREFAB_LOAD("prefabAustin");
-            widgetTargetGameObjects[i] = PREFAB_INSTANTIATE(_FORNOW_prefabAustin, "target " + i, widgetWidgetGameObjects[i]);
+        {
+            GameObject prefabTarget = PREFAB_LOAD("prefabTarget");
+            for (int i = 0; i < widgetMaximumNumberOfActiveWidgets; ++i) {
+                widgetTargetGameObjects[i] = PREFAB_INSTANTIATE(prefabTarget, "target " + i, widgetWidgetGameObjects[i]);
+            }
         }
         widgetFeaturePointGameObjects = new GameObject[widgetMaximumNumberOfActiveWidgets];
-        for (int i = 0; i < widgetMaximumNumberOfActiveWidgets; ++i) {
+        {
             GameObject prefabFeaturePoint  = PREFAB_LOAD("prefabFeaturePoint");
-            widgetFeaturePointGameObjects[i] = PREFAB_INSTANTIATE(prefabFeaturePoint, "featurePoint " + i, widgetWidgetGameObjects[i]);
+            for (int i = 0; i < widgetMaximumNumberOfActiveWidgets; ++i) {
+                widgetFeaturePointGameObjects[i] = PREFAB_INSTANTIATE(prefabFeaturePoint, "featurePoint " + i, widgetWidgetGameObjects[i]);
+            }
         }
         _widgetTargetEnabled = new NativeArray<int>(widgetMaximumNumberOfActiveWidgets, Allocator.Persistent);
         _widgetTargetPositions = new NativeArray<float3>(widgetMaximumNumberOfActiveWidgets, Allocator.Persistent);
@@ -260,7 +264,8 @@ unsafe public class Main : MonoBehaviour {
         ASSERT(GAME_OBJECT_IS_DRAWING(widgetWidgetGameObjects[i]));
         GAME_OBJECT_DRAW(widgetWidgetGameObjects[i], false);
 
-        // TODO: bubble right
+        // TODO: automated test that creates moves deactivates a couple of targets (deleting the first while the second still active)
+        // TODO: bubble
         --widgetNumberOfActiveWidgets;
     }
 
@@ -439,7 +444,7 @@ unsafe public class Main : MonoBehaviour {
         dragonMeshManager = new DragonMeshManager(dragon_head, dragon_body);
         dragonMeshManager.SetUpAll();
 
-        cables = InitCables();
+        cables = CablesInit();
 
         SolveWrapper(); 
 
@@ -579,7 +584,7 @@ unsafe public class Main : MonoBehaviour {
         return false;
     }
 
-    GameObject[][][] InitCables() {
+    GameObject[][][] CablesInit() {
         int num_cables = getNumCables();
         num_vias = new NativeArray<int>(num_cables, Allocator.Persistent);
 

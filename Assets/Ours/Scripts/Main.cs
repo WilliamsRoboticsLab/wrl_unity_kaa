@@ -1,3 +1,7 @@
+// NOTE: I don't use any scripts except this script
+//       => Deactivating a (scriptless) game object is the same as telling it to not draw itself--it's data is still accessible :)
+//          Do this with the GAME_OBJECT_DRAW(...) function
+
 // // TODO: Widget
 // TODO: move feature point inside of target (they should never be created and destroyed)
 // NOTE: featurePoint and target
@@ -36,7 +40,7 @@ unsafe public class Main : MonoBehaviour {
     }
 
 
-    // NOTE: I don't use any scripts except this script
+
     void GAME_OBJECT_SET_CHILDS_PARENT(GameObject childGameObject, GameObject parentGameObject) {
         childGameObject.transform.parent = parentGameObject.transform;
     }
@@ -59,6 +63,9 @@ unsafe public class Main : MonoBehaviour {
     }
     void GAME_OBJECT_DRAW(GameObject gameObject, bool draw) {
         gameObject.SetActive(draw);
+    }
+    bool GAME_OBJECT_IS_DRAWING(GameObject gameObject) {
+        return gameObject.activeSelf;
     }
     void GAME_OBJECT_SET_POSITION(GameObject gameObject, Vector3 position) {
         gameObject.transform.position = position;
@@ -200,7 +207,7 @@ unsafe public class Main : MonoBehaviour {
                 rayDirection.z,
                 NativeArrayUnsafeUtility.GetUnsafePtr(_castRayIntersectionPosition),
                 pleaseSetFeaturePoint,
-                widgetNumWidgets);
+                widgetNumberOfActiveWidgets);
         if (pleaseSetFeaturePoint) {
             if (result) {
                 WidgetActivate(new Vector3(_castRayIntersectionPosition[0], _castRayIntersectionPosition[1], _castRayIntersectionPosition[2]));
@@ -211,9 +218,9 @@ unsafe public class Main : MonoBehaviour {
 
 
     GameObject widgetWidgetsParentObject;
-    int widgetNumWidgets;
-    int widgetMaximumNumberOfWidgets;
-    GameObject[] widgetWidgetsGameObjects;
+    int widgetNumberOfActiveWidgets;
+    int widgetMaximumNumberOfActiveWidgets;
+    GameObject[] widgetWidgetGameObjects;
     GameObject[] widgetTargetGameObjects;
     GameObject[] widgetFeaturePointGameObjects;
     NativeArray<int> _widgetTargetEnabled;
@@ -221,34 +228,41 @@ unsafe public class Main : MonoBehaviour {
     NativeArray<float3> _widgetFeaturePointPositions; 
     void WidgetAwake() {
         widgetWidgetsParentObject = GAME_OBJECT_CREATE("widgetWidgetsParentObject");
-        widgetNumWidgets = 0;
-        widgetMaximumNumberOfWidgets = 16;
-        widgetWidgetsGameObjects = new GameObject[widgetMaximumNumberOfWidgets];
-        for (int i = 0; i < widgetMaximumNumberOfWidgets; ++i) {
-            widgetWidgetsGameObjects[i] = GAME_OBJECT_CREATE("widget " + i, widgetWidgetsParentObject);
-            GAME_OBJECT_DRAW(widgetWidgetsGameObjects[i], false);
+        widgetNumberOfActiveWidgets = 0;
+        widgetMaximumNumberOfActiveWidgets = 16;
+        widgetWidgetGameObjects = new GameObject[widgetMaximumNumberOfActiveWidgets];
+        for (int i = 0; i < widgetMaximumNumberOfActiveWidgets; ++i) {
+            widgetWidgetGameObjects[i] = GAME_OBJECT_CREATE("widget " + i, widgetWidgetsParentObject);
+            GAME_OBJECT_DRAW(widgetWidgetGameObjects[i], false);
         }
-        widgetTargetGameObjects = new GameObject[widgetMaximumNumberOfWidgets];
-        for (int i = 0; i < widgetMaximumNumberOfWidgets; ++i) {
+        widgetTargetGameObjects = new GameObject[widgetMaximumNumberOfActiveWidgets];
+        for (int i = 0; i < widgetMaximumNumberOfActiveWidgets; ++i) {
             GameObject _FORNOW_prefabAustin = PREFAB_LOAD("prefabAustin");
-            widgetTargetGameObjects[i] = PREFAB_INSTANTIATE(_FORNOW_prefabAustin, "target " + i, widgetWidgetsGameObjects[i]);
+            widgetTargetGameObjects[i] = PREFAB_INSTANTIATE(_FORNOW_prefabAustin, "target " + i, widgetWidgetGameObjects[i]);
         }
-        widgetFeaturePointGameObjects = new GameObject[widgetMaximumNumberOfWidgets];
-        for (int i = 0; i < widgetMaximumNumberOfWidgets; ++i) {
+        widgetFeaturePointGameObjects = new GameObject[widgetMaximumNumberOfActiveWidgets];
+        for (int i = 0; i < widgetMaximumNumberOfActiveWidgets; ++i) {
             GameObject prefabFeaturePoint  = PREFAB_LOAD("prefabFeaturePoint");
-            widgetFeaturePointGameObjects[i] = PREFAB_INSTANTIATE(prefabFeaturePoint, "featurePoint " + i, widgetWidgetsGameObjects[i]);
+            widgetFeaturePointGameObjects[i] = PREFAB_INSTANTIATE(prefabFeaturePoint, "featurePoint " + i, widgetWidgetGameObjects[i]);
         }
-        _widgetTargetEnabled = new NativeArray<int>(widgetMaximumNumberOfWidgets, Allocator.Persistent);
-        _widgetTargetPositions = new NativeArray<float3>(widgetMaximumNumberOfWidgets, Allocator.Persistent);
-        _widgetFeaturePointPositions = new NativeArray<float3>(widgetMaximumNumberOfWidgets, Allocator.Persistent);
+        _widgetTargetEnabled = new NativeArray<int>(widgetMaximumNumberOfActiveWidgets, Allocator.Persistent);
+        _widgetTargetPositions = new NativeArray<float3>(widgetMaximumNumberOfActiveWidgets, Allocator.Persistent);
+        _widgetFeaturePointPositions = new NativeArray<float3>(widgetMaximumNumberOfActiveWidgets, Allocator.Persistent);
     }
     void WidgetActivate(Vector3 position) {
-        GAME_OBJECT_DRAW(widgetWidgetsGameObjects[widgetNumWidgets], true);
-        GAME_OBJECT_SET_POSITION(widgetTargetGameObjects[widgetNumWidgets], position);
-        GAME_OBJECT_SET_POSITION(widgetFeaturePointGameObjects[widgetNumWidgets], position);
-        widgetNumWidgets++;
+        GAME_OBJECT_DRAW(widgetWidgetGameObjects[widgetNumberOfActiveWidgets], true);
+        GAME_OBJECT_SET_POSITION(widgetTargetGameObjects[widgetNumberOfActiveWidgets], position);
+        GAME_OBJECT_SET_POSITION(widgetFeaturePointGameObjects[widgetNumberOfActiveWidgets], position);
+        ++widgetNumberOfActiveWidgets;
     }
-    // TODO: WidgetDeactivateWidget(int i)
+    void WidgetDeactivate(int i) {
+        ASSERT((0 <= i) && (i < widgetMaximumNumberOfActiveWidgets));
+        ASSERT(GAME_OBJECT_IS_DRAWING(widgetWidgetGameObjects[i]));
+        GAME_OBJECT_DRAW(widgetWidgetGameObjects[i], false);
+
+        // TODO: bubble right
+        --widgetNumberOfActiveWidgets;
+    }
 
 
     int specialInputLeftRayHotTargetIndex = -1;
@@ -270,7 +284,7 @@ unsafe public class Main : MonoBehaviour {
     int SpecialInputCastRayAtTargets(Vector3 origin, Vector3 direction) {
         float radius = 0.025f;
         int result = -1;
-        for (int i = 0; i < widgetMaximumNumberOfWidgets; ++i) {
+        for (int i = 0; i < widgetMaximumNumberOfActiveWidgets; ++i) {
             GameObject target = widgetTargetGameObjects[i];
             if (!target.activeSelf) { continue; }
 
@@ -454,6 +468,11 @@ unsafe public class Main : MonoBehaviour {
                         widgetTargetGameObjects[0].transform.position.z
                         );
             }
+            if (jimTime > 1.0f) {
+                if (widgetNumberOfActiveWidgets == 1) {
+                    WidgetDeactivate(0);
+                }
+            }
         }
 
         InputUpdate();
@@ -514,8 +533,8 @@ unsafe public class Main : MonoBehaviour {
         }
 
         {
-            for (int k = 0; k < widgetMaximumNumberOfWidgets; k++){
-                _widgetTargetEnabled[k] = (widgetTargetGameObjects[k].activeSelf) ? 1 : 0;
+            for (int k = 0; k < widgetMaximumNumberOfActiveWidgets; k++){
+                _widgetTargetEnabled[k] = GAME_OBJECT_IS_DRAWING(widgetWidgetGameObjects[k]) ? 1 : 0;
                 _widgetTargetPositions[k] = new float3(widgetTargetGameObjects[k].transform.position.x, widgetTargetGameObjects[k].transform.position.y, widgetTargetGameObjects[k].transform.position.z);
             }
         }
@@ -523,7 +542,7 @@ unsafe public class Main : MonoBehaviour {
         var simulationMeshPositions = (float3 *) NativeArrayUnsafeUtility.GetUnsafePtr(meshData.GetVertexData<float3>(0));
 
         solve(
-                widgetMaximumNumberOfWidgets,
+                widgetMaximumNumberOfActiveWidgets,
                 NativeArrayUnsafeUtility.GetUnsafePtr(_widgetTargetEnabled),
                 NativeArrayUnsafeUtility.GetUnsafePtr(_widgetTargetPositions),
                 simulationMeshPositions,
@@ -533,7 +552,7 @@ unsafe public class Main : MonoBehaviour {
 
 
 
-        for(int k = 0; k < widgetNumWidgets; k++){
+        for(int k = 0; k < widgetNumberOfActiveWidgets; k++){
             widgetFeaturePointGameObjects[k].transform.position = _widgetFeaturePointPositions[k];
         }
 
@@ -904,7 +923,7 @@ unsafe public class DragonMeshManager {
 // } else if(inputPressedY || inputPressedB) {
 //     WidgetAwake();
 //     reset();
-//     for(int k = 0; k < widgetMaximumNumberOfWidgets; k++){
+//     for(int k = 0; k < widgetMaximumNumberOfActiveWidgets; k++){
 //         if (widgetFeaturePointGameObjects[k] != null) {
 //             Destroy(widgetFeaturePointGameObjects[k]);
 //         }
@@ -926,11 +945,11 @@ unsafe public class DragonMeshManager {
 //     }
 // }
 
-// foreach (Transform child in widgetTargetGameObjects[widgetNumWidgets].transform) {
+// foreach (Transform child in widgetTargetGameObjects[widgetNumberOfActiveWidgets].transform) {
 //     if (child.name == "Lines") {
 //         child.gameObject.SetActive(true);
 //         foreach (Transform child2 in child) {
-//             child2.GetComponent<LineRendererWrapper>().head = widgetFeaturePointGameObjects[widgetNumWidgets];
+//             child2.GetComponent<LineRendererWrapper>().head = widgetFeaturePointGameObjects[widgetNumberOfActiveWidgets];
 //         }
 //     }
 // }

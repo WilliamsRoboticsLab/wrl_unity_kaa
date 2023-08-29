@@ -345,6 +345,15 @@ delegate void cpp_reset() {
 bool HACK_RUNNING_ON_UNITY;
 
 delegate void cpp_init(bool _DRAGON_DRIVING = false) {
+
+    {
+        char path[256];
+        GetCurrentDirectory(_COUNT_OF(path), path);
+        strcat(path, "\\motor_config.txt");
+        kaa_dxl_init_FORNOW_ASSUMES_9_MOTORS(path);
+    }
+
+
     // FORNOW
     DRAGON_DRIVING__SET_IN_CPP_INIT = _DRAGON_DRIVING;
     if (_DRAGON_DRIVING) {
@@ -562,6 +571,10 @@ delegate void cpp_init(bool _DRAGON_DRIVING = false) {
 
     cpp_reset();
 
+}
+
+delegate void cpp_exit() {
+    dxl_exit();
 }
 
 
@@ -851,6 +864,10 @@ delegate void cpp_solve(
             for_(d, 3) ((float *) feature_point_positions__FLOAT3__ARRAY)[3 * indexOfFeaturePointToSet + d] = float(tmp[d]);
         }
     }
+}
+
+delegate void cpp_send2motors() {
+    kaa_dxl_write(currentState.u.data);
 }
 
 
@@ -1217,6 +1234,11 @@ void kaa() {
                         SPOOF_feature_point_positions);
             }
         }
+        static bool SPOOF_send2motors = true;
+        gui_checkbox("SPOOF_send2motors", &SPOOF_send2motors);
+        if (SPOOF_send2motors) {
+            cpp_send2motors();
+        }
 
         { // draw scene
             static int tabs = 0;
@@ -1341,7 +1363,7 @@ void kaa() {
             }
         }
     }
-    //getchar();
+    cpp_exit();
 }
 
 #undef LEN_U

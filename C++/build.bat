@@ -1,1 +1,0 @@
-cls && cl snake.cpp /LD && copy snake.dll C:\Users\Jim\xr-toy\Assets\snake.dll

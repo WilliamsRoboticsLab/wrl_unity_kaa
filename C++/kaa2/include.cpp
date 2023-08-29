@@ -11,6 +11,7 @@ typedef double real;
 #define EigenVectorXr Eigen::VectorXd
 #define JIM_IS_JIM
 #define SNAIL_I_SOLEMNLY_SWEAR_I_AM_UP_TO_NO_GOOD
+#define JIM_DXL
 
 // #include "C:\Users\WRL\Research\CS3XX\include.cpp"
 #include "C:\Users\Jim\Documents\GitHub\CS3XX\include.cpp"

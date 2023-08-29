@@ -131,6 +131,7 @@ GameObject:
   - component: {fileID: 6741743991518145854}
   - component: {fileID: 6741743991518145849}
   - component: {fileID: 6969159645521299099}
+  - component: {fileID: 3702557213509243567}
   m_Layer: 0
   m_Name: prefabTarget
   m_TagString: Untagged
@@ -449,3 +450,17 @@ MonoBehaviour:
       m_PostInfinity: 2
       m_RotationOrder: 4
     m_Variable: {fileID: 0}
+--- !u!64 &3702557213509243567
+MeshCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6741743991518145851}
+  m_Material: {fileID: 0}
+  m_IsTrigger: 0
+  m_Enabled: 1
+  serializedVersion: 4
+  m_Convex: 1
+  m_CookingOptions: 30
+  m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}

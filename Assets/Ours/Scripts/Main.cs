@@ -1,6 +1,8 @@
-// NOTE: I don't use any scripts except this script
+// NOTE: I don't use any scriptful objects (besides whatever object has this God script)
 //       => Deactivating a (scriptless) game object is the same as telling it to not draw itself--it's data is still accessible :)
 //          Do this with the GAME_OBJECT_DRAW(...) function
+
+// TODO: Roll your own grab interactable functionality
 
 // // TODO: Widget
 // TODO: move feature point inside of target (they should never be created and destroyed)
@@ -28,6 +30,8 @@ unsafe public class Main : MonoBehaviour {
 
     bool JIM_AUTOMATED_TEST_JIM_AUTOMATED_TEST = true;
     bool JIM_AUTOMATED_TEST_SINUSOIDS = false;
+    int JIM_AUTOMATED_TEST_PHASE__NOTE_NOT_USED_BY_SINUOSOIDAL_TEST;
+    float jimAutomatedTestTime = 0.0f;
 
 
 
@@ -184,7 +188,13 @@ unsafe public class Main : MonoBehaviour {
     GameObject interactionDotLeft;
     GameObject interactionDotRight;
 
-    bool solving;
+    bool solving = true;
+    bool sending2motors = true;
+    // bool drawDragon;
+
+    // transform.GetComponent<MeshRenderer>().enabled = !showDragon;
+    // dragon_head.transform.GetComponent<SkinnedMeshRenderer>().enabled = showDragon;
+    // dragon_body.transform.GetComponent<SkinnedMeshRenderer>().enabled = showDragon;
     // bool drawDragon;
 
     // transform.GetComponent<MeshRenderer>().enabled = !showDragon;
@@ -228,6 +238,7 @@ unsafe public class Main : MonoBehaviour {
     int widgetMaximumNumberOfActiveWidgets;
     GameObject[] widgetWidgetGameObjects;
     GameObject[] widgetTargetGameObjects;
+    Rigidbody[] widgetTargetRigidbodies;
     GameObject[] widgetFeaturePointGameObjects;
     NativeArray<int> _widgetTargetEnabled;
     NativeArray<float3> _widgetTargetPositions;
@@ -242,10 +253,12 @@ unsafe public class Main : MonoBehaviour {
             GAME_OBJECT_DRAW(widgetWidgetGameObjects[i], false);
         }
         widgetTargetGameObjects = new GameObject[widgetMaximumNumberOfActiveWidgets];
+        widgetTargetRigidbodies = new Rigidbody[widgetMaximumNumberOfActiveWidgets];
         {
             GameObject prefabTarget = PREFAB_LOAD("prefabTarget");
             for (int i = 0; i < widgetMaximumNumberOfActiveWidgets; ++i) {
                 widgetTargetGameObjects[i] = PREFAB_INSTANTIATE(prefabTarget, "target " + i, widgetWidgetGameObjects[i]);
+                widgetTargetRigidbodies[i] = widgetTargetGameObjects[i].transform.GetComponent<Rigidbody>();
             }
         }
         widgetFeaturePointGameObjects = new GameObject[widgetMaximumNumberOfActiveWidgets];
@@ -266,13 +279,14 @@ unsafe public class Main : MonoBehaviour {
         ++widgetNumberOfActiveWidgets;
     }
     void WidgetDeactivate(int i) {
+        // arrdelswap
         ASSERT((0 <= i) && (i < widgetMaximumNumberOfActiveWidgets));
         ASSERT(GAME_OBJECT_IS_DRAWING(widgetWidgetGameObjects[i]));
         GAME_OBJECT_DRAW(widgetWidgetGameObjects[i], false);
-
-        // TODO: automated test that creates moves deactivates a couple of targets (deleting the first while the second still active)
-        // TODO: bubble
         --widgetNumberOfActiveWidgets;
+        GameObject tmp = widgetWidgetGameObjects[i];
+        widgetWidgetGameObjects[i] = widgetWidgetGameObjects[widgetNumberOfActiveWidgets];
+        widgetWidgetGameObjects[widgetNumberOfActiveWidgets] = tmp;
     }
 
 
@@ -309,13 +323,6 @@ unsafe public class Main : MonoBehaviour {
                 if (result == -1) result = i;
                 else if ((oc.magnitude < (origin - widgetTargetGameObjects[result].transform.position).magnitude)) result = i;
             }
-
-            // target.transform.GetComponent<Rigidbody>().velocity = new Vector3(0.0f, 0.0f, 0.0f);
-            // target.transform.position = new Vector3(
-            //         Mathf.Clamp(target.transform.position.x, -2.0f, 2.0f),
-            //         Mathf.Clamp(target.transform.position.y, -2.0f, 2.0f), 
-            //         Mathf.Clamp(target.transform.position.z, -2.0f, 2.0f)
-            //         );
         }
         return result;
     }
@@ -329,6 +336,8 @@ unsafe public class Main : MonoBehaviour {
     [return: MarshalAs(UnmanagedType.Bool)]
     static public extern bool FreeLibrary(IntPtr hModule);
     IntPtr library;
+    delegate void cpp_send2motors();
+    delegate void cpp_exit();
     delegate void cpp_init(bool SHOW_DRAGON = false); // TODO
     delegate int cpp_getNumVertices();
     delegate int cpp_getNumTriangles();
@@ -358,6 +367,8 @@ unsafe public class Main : MonoBehaviour {
             int indexOfFeaturePointToSet,
             void *feature_point_positions__FLOAT3__ARRAY = null);
 
+    cpp_send2motors        send2motors;
+    cpp_exit               exit;
     cpp_init               init;
     cpp_reset              reset;
     cpp_solve              solve;
@@ -370,6 +381,8 @@ unsafe public class Main : MonoBehaviour {
 
     void LoadDLL() {
         library = LoadLibrary("Assets/snake");
+        send2motors        = (cpp_send2motors)        Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_send2motors"),        typeof(cpp_send2motors));
+        exit               = (cpp_exit)               Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_exit"),               typeof(cpp_exit));
         init               = (cpp_init)               Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_init"),               typeof(cpp_init));
         reset              = (cpp_reset)              Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_reset"),              typeof(cpp_reset));
         solve              = (cpp_solve)              Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_solve"),              typeof(cpp_solve));
@@ -412,7 +425,6 @@ unsafe public class Main : MonoBehaviour {
 
 
 
-    // Vector3 node_pos;
     Color targetColor;
     NativeArray<int> num_vias; 
     NativeArray<float3> cable_positions;
@@ -426,7 +438,6 @@ unsafe public class Main : MonoBehaviour {
 
         // init(true);
         init(false);
-
 
         WidgetAwake();
 
@@ -443,7 +454,6 @@ unsafe public class Main : MonoBehaviour {
             interactionDotRight.SetActive(false);
         }
 
-
         { // CableAwake
             prefabCableSphere   = PREFAB_LOAD("prefabCableSphere");
             prefabCableCylinder = PREFAB_LOAD("prefabCableCylinder");
@@ -453,12 +463,9 @@ unsafe public class Main : MonoBehaviour {
         dragonMeshManager = new DragonMeshManager(dragon_head, dragon_body);
         dragonMeshManager.SetUpAll();
 
-
         SolveWrapper(); 
 
-
         if (JIM_AUTOMATED_TEST_JIM_AUTOMATED_TEST) {
-            solving = true;
             CastRayWrapper(new Vector3(0.0f, -0.4f, -1.0f), new Vector3(0.0f, 0.0f, 1.0f), true);
             if (!JIM_AUTOMATED_TEST_SINUSOIDS) {
                 widgetTargetGameObjects[0].transform.position = new Vector3(
@@ -470,19 +477,29 @@ unsafe public class Main : MonoBehaviour {
         }
     }
 
-    float jimTime = 0.0f;
     void Update () {
         if (JIM_AUTOMATED_TEST_JIM_AUTOMATED_TEST) {
-            jimTime += 0.0167f;
+            jimAutomatedTestTime += 0.0167f;
             if (JIM_AUTOMATED_TEST_SINUSOIDS) {
                 widgetTargetGameObjects[0].transform.position = new Vector3(
-                        0.2f * Mathf.Sin(5 * jimTime),
+                        0.2f * Mathf.Sin(5 * jimAutomatedTestTime),
                         widgetTargetGameObjects[0].transform.position.y,
                         widgetTargetGameObjects[0].transform.position.z
                         );
-            }
-            if (jimTime > 1.0f) {
-                if (widgetNumberOfActiveWidgets == 1) {
+            } else {
+                if (jimAutomatedTestTime > 0.66f && JIM_AUTOMATED_TEST_PHASE__NOTE_NOT_USED_BY_SINUOSOIDAL_TEST == 0) {
+                    ++JIM_AUTOMATED_TEST_PHASE__NOTE_NOT_USED_BY_SINUOSOIDAL_TEST;
+                    WidgetDeactivate(0);
+                } else if (jimAutomatedTestTime > 1.33f && JIM_AUTOMATED_TEST_PHASE__NOTE_NOT_USED_BY_SINUOSOIDAL_TEST == 1) {
+                    ++JIM_AUTOMATED_TEST_PHASE__NOTE_NOT_USED_BY_SINUOSOIDAL_TEST;
+                    CastRayWrapper(new Vector3(0.0f, -0.6f, -1.0f), new Vector3(0.0f, 0.0f, 1.0f), true);
+                    widgetTargetGameObjects[0].transform.position = new Vector3(
+                            -0.2f,
+                            widgetTargetGameObjects[0].transform.position.y,
+                            widgetTargetGameObjects[0].transform.position.z
+                            );
+                } else if (jimAutomatedTestTime > 2.00f && JIM_AUTOMATED_TEST_PHASE__NOTE_NOT_USED_BY_SINUOSOIDAL_TEST == 2) {
+                    ++JIM_AUTOMATED_TEST_PHASE__NOTE_NOT_USED_BY_SINUOSOIDAL_TEST;
                     WidgetDeactivate(0);
                 }
             }
@@ -490,13 +507,6 @@ unsafe public class Main : MonoBehaviour {
 
         InputUpdate();
         SpecialInputUpdate();
-
-        if (solving) {
-            SolveWrapper();
-            UpdateCables();
-        }
-
-        dragonMeshManager.UpdateAll();
 
         { // interactionDotLeft, interactionDotRight
             {
@@ -524,6 +534,28 @@ unsafe public class Main : MonoBehaviour {
                 if (specialInputRightRayEnteredTarget) { UnityEngine.XR.InputDevices.GetDeviceAtXRNode(UnityEngine.XR.XRNode.RightHand).SendHapticImpulse(0, 0.3f, 0.15f); }
             }
         }
+
+        { // FORNOW: Aggressive clamping
+            for (int i = 0; i < widgetMaximumNumberOfActiveWidgets; ++i) {
+                widgetTargetRigidbodies[i].velocity = new Vector3(0.0f, 0.0f, 0.0f);
+                widgetTargetGameObjects[i].transform.position = new Vector3(
+                        Mathf.Clamp(widgetTargetGameObjects[i].transform.position.x, -2.0f, 2.0f),
+                        Mathf.Clamp(widgetTargetGameObjects[i].transform.position.y, -2.0f, 2.0f), 
+                        Mathf.Clamp(widgetTargetGameObjects[i].transform.position.z, -2.0f, 2.0f)
+                        );
+            }
+        }
+
+        if (solving) {
+            SolveWrapper();
+            UpdateCables();
+        }
+
+        if (sending2motors) {
+            send2motors();
+        }
+
+        dragonMeshManager.UpdateAll();
     }
 
     void SolveWrapper() {
@@ -545,27 +577,28 @@ unsafe public class Main : MonoBehaviour {
             meshData.SetIndexBufferParams(triangleIndexCount, IndexFormat.UInt32);
         }
 
-        {
-            for (int k = 0; k < widgetMaximumNumberOfActiveWidgets; k++){
-                _widgetTargetEnabled[k] = GAME_OBJECT_IS_DRAWING(widgetWidgetGameObjects[k]) ? 1 : 0;
-                _widgetTargetPositions[k] = new float3(widgetTargetGameObjects[k].transform.position.x, widgetTargetGameObjects[k].transform.position.y, widgetTargetGameObjects[k].transform.position.z);
-            }
+        for (int k = 0; k < widgetMaximumNumberOfActiveWidgets; k++){
+            _widgetTargetEnabled[k] = GAME_OBJECT_IS_DRAWING(widgetWidgetGameObjects[k]) ? 1 : 0;
+            _widgetTargetPositions[k] = new float3(
+                    widgetTargetGameObjects[k].transform.position.x,
+                    widgetTargetGameObjects[k].transform.position.y,
+                    widgetTargetGameObjects[k].transform.position.z
+                    );
         }
-
-        var simulationMeshPositions = (float3 *) NativeArrayUnsafeUtility.GetUnsafePtr(meshData.GetVertexData<float3>(0));
 
         solve(
                 widgetMaximumNumberOfActiveWidgets,
                 NativeArrayUnsafeUtility.GetUnsafePtr(_widgetTargetEnabled),
                 NativeArrayUnsafeUtility.GetUnsafePtr(_widgetTargetPositions),
-                simulationMeshPositions,
+                NativeArrayUnsafeUtility.GetUnsafePtr(meshData.GetVertexData<float3>(0)),
                 NativeArrayUnsafeUtility.GetUnsafePtr(meshData.GetVertexData<float3>(1)),
                 NativeArrayUnsafeUtility.GetUnsafePtr(meshData.GetIndexData<int>()),
-                NativeArrayUnsafeUtility.GetUnsafePtr(_widgetFeaturePointPositions));
+                NativeArrayUnsafeUtility.GetUnsafePtr(_widgetFeaturePointPositions)
+             );
 
 
 
-        for(int k = 0; k < widgetNumberOfActiveWidgets; k++){
+        for(int k = 0; k < widgetMaximumNumberOfActiveWidgets; k++){
             widgetFeaturePointGameObjects[k].transform.position = _widgetFeaturePointPositions[k];
         }
 
@@ -672,8 +705,10 @@ unsafe public class Main : MonoBehaviour {
 
 
     void OnApplicationQuit () {
+        exit();
+
         { // FORNOW: uber sketchy delay because solve may not have finished writing data allocated by C# and if we quit out and then it writes we crash unity
-            int N = 31623;
+            int N = 40000;
             int k;
             for (int i = 0; i < N; ++i) for (int j = 0; j < N; ++j) k = i + j;
         }

@@ -18,7 +18,7 @@ readme
 
 assumptions
 ------
-- all spool radii are 0.02 m (i.e., spool diameter = 4 cm)
+- all spool radii are 0.01 m (i.e., spool diameter = 2 cm)
 - all motors have baudRate = 1Mbps
 - all motors are in Extended Position Mode
 - all motors have been zeroed using homing offset so 0 is robot's rest position (cables just barely tense)

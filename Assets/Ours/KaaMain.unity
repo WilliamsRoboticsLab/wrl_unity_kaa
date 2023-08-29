@@ -2182,12 +2182,12 @@ GameObject:
   - component: {fileID: 1372507254}
   - component: {fileID: 1372507253}
   m_Layer: 0
-  m_Name: Simulator
+  m_Name: Simulator (if things are wonky in VR turn this off)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &1372507253
 MonoBehaviour:
   m_ObjectHideFlags: 0

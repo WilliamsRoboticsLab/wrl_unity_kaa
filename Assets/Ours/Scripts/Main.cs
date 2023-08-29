@@ -28,7 +28,7 @@ using UnityEngine.Rendering;
 unsafe public class Main : MonoBehaviour {
 
 
-    bool JIM_AUTOMATED_TEST_JIM_AUTOMATED_TEST = true;
+    bool JIM_AUTOMATED_TEST_JIM_AUTOMATED_TEST = false;
     bool JIM_AUTOMATED_TEST_SINUSOIDS = false;
     int JIM_AUTOMATED_TEST_PHASE__NOTE_NOT_USED_BY_SINUOSOIDAL_TEST;
     float jimAutomatedTestTime = 0.0f;

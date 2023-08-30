@@ -51,8 +51,9 @@ int IK_MAX_LINE_SEARCH_STEPS = 8;
 
 #include "include.cpp"
 
-bool DRAGON_SHOW = false;
-bool DRAGON_DRIVING__SET_IN_CPP_INIT = false;
+bool _DRAGON_SHOW;
+bool _DRAGON_DRIVING__SET_IN_CPP_INIT;
+
 struct IntersectionResult {
     bool hit;
     vec3 p;
@@ -229,6 +230,7 @@ delegate void cpp_dragon_getMesh (
     }
 }
 
+int _ZZZ(int d) { return (d == 2) ? -1 : 1; } // unity is left-handed
 
 delegate void cpp_dragon_yzoBones(
         void *bones_y,
@@ -308,8 +310,8 @@ delegate void cpp_getCables(
 
     for (int i = 0; i < sim.num_cable_vias_total; i++) {
         vec3 v = get(currentState.x, sim.vias[i]);
-        for_(j, 3) {
-            ((float *)cpp_cable_positions)[i*3 + j] = (float)(v[j]);
+        for_(d, 3) {
+            ((float *)cpp_cable_positions)[i * 3 + d] = (float)(_ZZZ(d) * v[d]);
         }
     }
 
@@ -355,9 +357,9 @@ delegate void cpp_init(bool _DRAGON_DRIVING = false) {
 
 
     // FORNOW
-    DRAGON_DRIVING__SET_IN_CPP_INIT = _DRAGON_DRIVING;
+    _DRAGON_DRIVING__SET_IN_CPP_INIT = _DRAGON_DRIVING;
     if (_DRAGON_DRIVING) {
-        DRAGON_SHOW = true;
+        _DRAGON_SHOW = true;
         if (!COW0._cow_initialized) {
             HACK_RUNNING_ON_UNITY = true;
             _cow_init();
@@ -594,10 +596,10 @@ delegate bool cpp_castRay(
         int indexOfFeaturePointToSet,
         void *feature_point_positions__FLOAT3__ARRAY = NULL) {
 
-    vec3 ray_origin = { ray_origin_x, ray_origin_y, ray_origin_z };
-    vec3 ray_direction = { ray_direction_x, ray_direction_y, ray_direction_z };
+    vec3 ray_origin = { ray_origin_x, ray_origin_y, _ZZZ(2) * ray_origin_z };
+    vec3 ray_direction = { ray_direction_x, ray_direction_y, _ZZZ(2) * ray_direction_z };
     IntersectionResult result; {
-        if (DRAGON_DRIVING__SET_IN_CPP_INIT) {
+        if (_DRAGON_DRIVING__SET_IN_CPP_INIT) {
             if (HACK_RUNNING_ON_UNITY) cow_begin_frame();
             dragonBody.bones = currentBones.data;
             result = GPU_pick(ray_origin, ray_direction, &dragonBody);
@@ -606,16 +608,13 @@ delegate bool cpp_castRay(
         }
     }
     if (result.hit) {
-        for_(d, 3) (((float *) intersection_position__FLOAT_ARRAY__LENGTH_3)[d]) = float(result.p[d]);
+        for_(d, 3) (((float *) intersection_position__FLOAT_ARRAY__LENGTH_3)[d]) = float(_ZZZ(d) * result.p[d]);
         if (pleaseSetFeaturePoint) {
             ASSERT(indexOfFeaturePointToSet >= 0);
             ASSERT(indexOfFeaturePointToSet < MAX_NUM_FEATURE_POINTS);
             featurePoints[indexOfFeaturePointToSet] = { { { result.tri[0], result.w[0] }, { result.tri[1], result.w[1] }, { result.tri[2], result.w[2] } } };
             if (feature_point_positions__FLOAT3__ARRAY) {
-                // // FORNOW simpler method right after a cast (just use p)
-                // vec3 tmp = (DRAGON) ? get(dragonBody.vertex_positions, featurePoints[indexOfFeaturePointToSet]) : get(currentState.x, featurePoints[indexOfFeaturePointToSet]);
-                // for_(d, 3) ((float *) feature_point_positions__FLOAT3__ARRAY)[3 * indexOfFeaturePointToSet + d] = float(tmp[d]);
-                for_(d, 3) ((float *) feature_point_positions__FLOAT3__ARRAY)[3 * indexOfFeaturePointToSet + d] = float(result.p[d]);
+                for_(d, 3) ((float *) feature_point_positions__FLOAT3__ARRAY)[3 * indexOfFeaturePointToSet + d] = float(_ZZZ(d) * result.p[d]);
             }
         }
     }
@@ -659,7 +658,7 @@ delegate void cpp_solve(
     int *targetEnabled = (int *) _targetEnabled__INT_ARRAY;
     vec3 targetPositions[MAX_NUM_FEATURE_POINTS]; {
         for_(i, num_feature_points) {
-            for_(d, 3) targetPositions[i][d] = ((float *) _targetPositions__FLOAT3_ARRAY)[3 * i + d];
+            for_(d, 3) targetPositions[i][d] = _ZZZ(d) * ((float *) _targetPositions__FLOAT3_ARRAY)[3 * i + d];
         }
     }
     bool relax; {
@@ -698,7 +697,7 @@ delegate void cpp_solve(
             } else {
                 real Q = 0.0; {
                     for_(i, MAX_NUM_FEATURE_POINTS) if (targetEnabled[i]) {
-                        vec3 p = (DRAGON_DRIVING__SET_IN_CPP_INIT) ? skinnedGet(mesh, bones, featurePoints[i]) : get(x, featurePoints[i]);
+                        vec3 p = (_DRAGON_DRIVING__SET_IN_CPP_INIT) ? skinnedGet(mesh, bones, featurePoints[i]) : get(x, featurePoints[i]);
                         Q += Q_c * .5 * squaredNorm(p - targetPositions[i]);
                     }
                 }
@@ -748,7 +747,7 @@ delegate void cpp_solve(
                 } else {
                     SDVector dQdu; {
                         SDVector dQdx(LEN_X); {
-                            if (DRAGON_DRIVING__SET_IN_CPP_INIT) {
+                            if (_DRAGON_DRIVING__SET_IN_CPP_INIT) {
                                 SDVector dQds(LEN_S); {
                                     for_(i, MAX_NUM_FEATURE_POINTS) if (targetEnabled[i]) {
                                         vec3 p = skinnedGet(mesh, bones, featurePoints[i]);
@@ -853,15 +852,16 @@ delegate void cpp_solve(
     { // marshall mesh
         SDVector vertex_normals = sim.get_vertex_normals(currentState.x);
         for_(k, LEN_X) {
-            ((UnityVertexAttributeFloat *) vertex_positions__FLOAT3_ARRAY)[k] = UnityVertexAttributeFloat(currentState.x[k]);
-            ((UnityVertexAttributeFloat *) vertex_normals__FLOAT3_ARRAY)[k] = UnityVertexAttributeFloat(vertex_normals[k]);
+            int d = k / 3;
+            ((UnityVertexAttributeFloat *) vertex_positions__FLOAT3_ARRAY)[k] = UnityVertexAttributeFloat(_ZZZ(d) * currentState.x[k]);
+            ((UnityVertexAttributeFloat *) vertex_normals__FLOAT3_ARRAY)[k] = UnityVertexAttributeFloat(_ZZZ(d) * vertex_normals[k]);
         }
         for_(k, 3 * sim.num_triangles) ((UnityTriangleIndexInt *) triangle_indices__UINT_ARRAY)[k] = (UnityTriangleIndexInt) ((int *) sim.triangle_indices)[k];
         for_(indexOfFeaturePointToSet, num_feature_points) {
-            vec3 tmp = (DRAGON_DRIVING__SET_IN_CPP_INIT)
+            vec3 tmp = (_DRAGON_DRIVING__SET_IN_CPP_INIT)
                 ? skinnedGet(mesh, currentBones, featurePoints[indexOfFeaturePointToSet])
                 : get(currentState.x, featurePoints[indexOfFeaturePointToSet]);
-            for_(d, 3) ((float *) feature_point_positions__FLOAT3__ARRAY)[3 * indexOfFeaturePointToSet + d] = float(tmp[d]);
+            for_(d, 3) ((float *) feature_point_positions__FLOAT3__ARRAY)[3 * indexOfFeaturePointToSet + d] = UnityVertexAttributeFloat(_ZZZ(d) * tmp[d]);
         }
     }
 }
@@ -881,8 +881,228 @@ void SPOOF_reset() {
     // SPOOF_targetEnabled[0] = TRUE;
 }
 
-//CARL
 
+
+void kaa() {
+    cpp_init(false);
+    SPOOF_reset();
+
+    UnityVertexAttributeFloat *SPOOF_vertex_positions = (UnityVertexAttributeFloat *) calloc(LEN_X, sizeof(UnityVertexAttributeFloat));
+    UnityVertexAttributeFloat *SPOOF_vertex_normals = (UnityVertexAttributeFloat *) calloc(LEN_X, sizeof(UnityVertexAttributeFloat));
+    UnityTriangleIndexInt     *SPOOF_triangle_indices = (UnityTriangleIndexInt *) calloc(3 * sim.num_triangles, sizeof(UnityTriangleIndexInt));
+    UnityVertexAttributeFloat *SPOOF_feature_point_positions = (UnityVertexAttributeFloat *) calloc(3 * MAX_NUM_FEATURE_POINTS, sizeof(UnityVertexAttributeFloat));
+
+    COW1._gui_hide_and_disable = AUTOMATED_SPEED_TEST__QUITS_AFTER_A_COUPLE_SECONDS;
+    Camera3D camera = { 1.7 * ROBOT_LENGTH, RAD(60), 0.0, 0.0, 0.0, -0.5 * ROBOT_LENGTH };
+    while (cow_begin_frame()) {
+        camera_move(&camera);
+        mat4 P = camera_get_P(&camera);
+        mat4 V = camera_get_V(&camera);
+        mat4 PV = P * V;
+
+
+        auto draw_sphere = [&](vec3 s, vec3 color = monokai.white) { library.meshes.sphere.draw(P, V, M4_Translation(s) * M4_Scaling(0.01), color); };
+
+        struct CastRayResult {
+            bool intersects;
+            vec3 intersection_position;
+        };
+        auto castRay = [&](bool pleaseSetFeaturePoint, int featurePointIndex) -> CastRayResult {
+            CastRayResult result = {};
+            vec3 ray_origin = camera_get_position(&camera);
+            vec3 ray_direction = camera_get_mouse_ray(&camera);
+            float intersection_position__FLOAT_ARRAY__LENGTH_3[3]; {
+                result.intersects = cpp_castRay(
+                        (float) ray_origin.x,
+                        (float) ray_origin.y,
+                        (float) ray_origin.z,
+                        (float) ray_direction.x,
+                        (float) ray_direction.y,
+                        (float) ray_direction.z,
+                        intersection_position__FLOAT_ARRAY__LENGTH_3,
+                        pleaseSetFeaturePoint,
+                        featurePointIndex,
+                        SPOOF_feature_point_positions);
+            }
+            for_(d, 3) result.intersection_position[d] = intersection_position__FLOAT_ARRAY__LENGTH_3[d];
+            return result;
+        };
+
+        if (gui_button("reset", 'r')) {
+            cpp_reset();
+            SPOOF_reset();
+        }
+
+        // NOTE: very important to have solved physics at least once so the global hessian is ret to go
+        static bool SPOOF_solveIK = true;
+        gui_checkbox("SPOOF_solveIK", &SPOOF_solveIK, COW_KEY_SPACE);
+        if (SPOOF_solveIK) { // ik
+            if ((sim.num_cables >= 0)) {
+                float _SPOOF_target_positions__FLOAT_ARRAY[3 * MAX_NUM_FEATURE_POINTS]; {
+                    for_(k, _COUNT_OF(_SPOOF_target_positions__FLOAT_ARRAY)) _SPOOF_target_positions__FLOAT_ARRAY[k] = float(((real *) SPOOF_targetPositions)[k]);
+                }
+
+                cpp_solve(
+                        MAX_NUM_FEATURE_POINTS,
+                        SPOOF_targetEnabled,
+                        _SPOOF_target_positions__FLOAT_ARRAY,
+                        SPOOF_vertex_positions,
+                        SPOOF_vertex_normals,
+                        SPOOF_triangle_indices,
+                        SPOOF_feature_point_positions);
+            }
+        }
+        static bool SPOOF_send2motors = true;
+        gui_checkbox("SPOOF_send2motors", &SPOOF_send2motors);
+        if (SPOOF_send2motors) {
+            cpp_send2motors();
+        }
+
+        { // draw scene
+            static int tabs = 0;
+            if (globals.key_pressed['1']) ++tabs;
+            gui_checkbox("_DRAGON_SHOW", &_DRAGON_SHOW, COW_KEY_TAB);
+            if (!_DRAGON_SHOW) {
+                {
+                    if (tabs % 3 == 0) {
+                        sim.draw(P, V, M4_Identity(), &currentState);
+                    } else if (tabs % 3 == 1) { // draw
+                        sim.draw(P * V, &currentState);
+                    } else { // check stuff being sent to C#
+                        eso_begin(PV, SOUP_OUTLINED_TRIANGLES);
+                        eso_color(monokai.black);
+                        for_(triangle_i, cpp_getNumTriangles()) {
+                            for_(d, 3) {
+                                eso_vertex(
+                                        SPOOF_vertex_positions[3 * SPOOF_triangle_indices[3 * triangle_i + d] + 0],
+                                        SPOOF_vertex_positions[3 * SPOOF_triangle_indices[3 * triangle_i + d] + 1],
+                                        SPOOF_vertex_positions[3 * SPOOF_triangle_indices[3 * triangle_i + d] + 2]
+                                        );
+                            }
+                        }
+                        eso_end();
+                    }
+                }
+            } else { // skinning
+                dragonBody.bones = currentBones.data;
+                dragonBody.draw(P, V, globals.Identity);
+
+                { // _dragonHead
+                    // FORNOW: hacky, with few dependencies
+                    vec3 y = -normalized(get(currentState.x, 9 + (NUM_BONES) * 10) - get(currentState.x, 9 + (NUM_BONES - 1) * 10));
+                    vec3 up = { 0.0, 1.0, 0.0 };
+                    vec3 x = cross(y, up);
+                    x = IS_ZERO(squaredNorm(x)) ? V3(1.0, 0.0, 0.0) : normalized(x);
+                    vec3 z = cross(x, y);
+                    vec3 o = get(currentState.x, 9 + (NUM_BONES) * 10);
+                    _dragonHead.draw(P, V, M4_xyzo(x, y, z, o));
+                }
+            }
+
+
+            { // widget
+                bool mouseClickConsumed = false;
+                bool mouseHotConsumed = false;
+                { // SPOOF_targetPositions
+                    for_(featurePointIndex, MAX_NUM_FEATURE_POINTS) {
+                        if (!SPOOF_targetEnabled[featurePointIndex]) continue;
+                        vec3 color = color_kelly(featurePointIndex);
+                        vec3 SPOOF_feature_point_position = { SPOOF_feature_point_positions[3 * featurePointIndex + 0], SPOOF_feature_point_positions[3 * featurePointIndex + 1], SPOOF_feature_point_positions[3 * featurePointIndex + 2] };
+
+                        WidgetResult widgetResult = widget(P, V, featurePointIndex, &SPOOF_targetPositions[featurePointIndex], SPOOF_feature_point_position, color);
+
+                        mouseClickConsumed |= widgetResult.mouseClickConsumed; // FORNOW
+                        mouseHotConsumed |= widgetResult.mouseHotConsumed; // FORNOW
+                        if (widgetResult.pleaseDisableHandle) {
+                            SPOOF_targetEnabled[featurePointIndex] = FALSE;
+                        }
+                        if (widgetResult.recastFeaturePoint) {
+                            castRay(true, featurePointIndex);
+                        }
+                    }
+                }
+
+
+                if (!mouseClickConsumed && !mouseHotConsumed) { // SPOOF_intersection_position
+                    bool pleaseSetFeaturePoint = globals.mouse_left_pressed;
+                    int featurePointIndex; {
+                        for (featurePointIndex = 0; SPOOF_targetEnabled[featurePointIndex]; ++featurePointIndex) {}
+                        ASSERT(featurePointIndex < MAX_NUM_FEATURE_POINTS);
+                    }
+                    CastRayResult castRayResult = castRay(pleaseSetFeaturePoint, featurePointIndex);
+                    if (!globals.mouse_left_held && castRayResult.intersects) draw_ball(P, V, castRayResult.intersection_position, color_kelly(featurePointIndex));
+                    if (castRayResult.intersects && pleaseSetFeaturePoint) {
+                        SPOOF_targetEnabled[featurePointIndex] = TRUE;
+                        SPOOF_targetPositions[featurePointIndex] = castRayResult.intersection_position;
+                    }
+                }
+            }
+
+            { // ceiling
+                real r = 0.3;
+                eso_begin(PV, (tabs % 3 == 0) ? SOUP_QUADS : SOUP_OUTLINED_QUADS);
+                if (tabs % 3 == 0) {
+                    eso_color(1.0, 1.0, 1.0, 0.5);
+                } else {
+                    eso_color(0.0, 0.0, 0.0, 0.5);
+                }
+                eso_vertex( r, 0.0,  r);
+                eso_vertex( r, 0.0, -r);
+                eso_vertex(-r, 0.0, -r);
+                eso_vertex(-r, 0.0,  r);
+                eso_end();
+            }
+
+        }
+
+        { // fornow
+            if (globals.key_held['a']) SPOOF_targetPositions[0] = transformPoint(M4_RotationAboutYAxis(RAD(1)), SPOOF_targetPositions[0]);
+        }
+
+
+        if (1) { // manual sliders
+            for_(j, sim.num_cables) {
+                char buffer[] = "u_X";
+                buffer[2] = char('0' + j);
+                gui_slider(buffer, &currentState.u[j], -(ROBOT_LENGTH / 3), (ROBOT_LENGTH / 3));
+            }
+        }
+
+
+
+        { // FORNOW automated testing
+            if (AUTOMATED_SPEED_TEST__QUITS_AFTER_A_COUPLE_SECONDS) {
+                static real testTime = 0.0;
+                SPOOF_targetPositions[0] += V3(0.003);
+                if (testTime > 2.0) {
+                    exit(1);
+                }
+                testTime += .0167;
+            }
+        }
+    }
+    cpp_exit();
+}
+
+#undef LEN_U
+#undef LEN_X
+
+////////////////////////////////////////////////////////////////////////////////
+
+void main() {
+    omp_set_num_threads(6);
+    APPS {
+        // APP(jones);
+        APP(kaa);
+        // APP(eg_fbo);
+    }
+}
+
+
+
+
+#if 0
+//CARL
 void jonesUpdateCableReferenceLengths() {
     State copy = currentState;
 
@@ -1164,218 +1384,4 @@ void jones() {
 }
 
 //END CARL
-
-void kaa() {
-    cpp_init(true);
-    SPOOF_reset();
-
-    UnityVertexAttributeFloat *SPOOF_vertex_positions = (UnityVertexAttributeFloat *) calloc(LEN_X, sizeof(UnityVertexAttributeFloat));
-    UnityVertexAttributeFloat *SPOOF_vertex_normals = (UnityVertexAttributeFloat *) calloc(LEN_X, sizeof(UnityVertexAttributeFloat));
-    UnityTriangleIndexInt     *SPOOF_triangle_indices = (UnityTriangleIndexInt *) calloc(3 * sim.num_triangles, sizeof(UnityTriangleIndexInt));
-    UnityVertexAttributeFloat *SPOOF_feature_point_positions = (UnityVertexAttributeFloat *) calloc(3 * MAX_NUM_FEATURE_POINTS, sizeof(UnityVertexAttributeFloat));
-
-    COW1._gui_hide_and_disable = AUTOMATED_SPEED_TEST__QUITS_AFTER_A_COUPLE_SECONDS;
-    Camera3D camera = { 1.7 * ROBOT_LENGTH, RAD(60), 0.0, 0.0, 0.0, -0.5 * ROBOT_LENGTH };
-    while (cow_begin_frame()) {
-        camera_move(&camera);
-        mat4 P = camera_get_P(&camera);
-        mat4 V = camera_get_V(&camera);
-        mat4 PV = P * V;
-
-
-        auto draw_sphere = [&](vec3 s, vec3 color = monokai.white) { library.meshes.sphere.draw(P, V, M4_Translation(s) * M4_Scaling(0.01), color); };
-
-        struct CastRayResult {
-            bool intersects;
-            vec3 intersection_position;
-        };
-        auto castRay = [&](bool pleaseSetFeaturePoint, int featurePointIndex) -> CastRayResult {
-            CastRayResult result = {};
-            vec3 ray_origin = camera_get_position(&camera);
-            vec3 ray_direction = camera_get_mouse_ray(&camera);
-            float intersection_position__FLOAT_ARRAY__LENGTH_3[3]; {
-                result.intersects = cpp_castRay(
-                        (float) ray_origin.x,
-                        (float) ray_origin.y,
-                        (float) ray_origin.z,
-                        (float) ray_direction.x,
-                        (float) ray_direction.y,
-                        (float) ray_direction.z,
-                        intersection_position__FLOAT_ARRAY__LENGTH_3,
-                        pleaseSetFeaturePoint,
-                        featurePointIndex,
-                        SPOOF_feature_point_positions);
-            }
-            for_(d, 3) result.intersection_position[d] = intersection_position__FLOAT_ARRAY__LENGTH_3[d];
-            return result;
-        };
-
-        if (gui_button("reset", 'r')) {
-            cpp_reset();
-            SPOOF_reset();
-        }
-
-        // NOTE: very important to have solved physics at least once so the global hessian is ret to go
-        static bool SPOOF_solveIK = true;
-        gui_checkbox("SPOOF_solveIK", &SPOOF_solveIK, COW_KEY_SPACE);
-        if (SPOOF_solveIK) { // ik
-            if ((sim.num_cables >= 0)) {
-                float _SPOOF_target_positions__FLOAT_ARRAY[3 * MAX_NUM_FEATURE_POINTS]; {
-                    for_(k, _COUNT_OF(_SPOOF_target_positions__FLOAT_ARRAY)) _SPOOF_target_positions__FLOAT_ARRAY[k] = float(((real *) SPOOF_targetPositions)[k]);
-                }
-
-                cpp_solve(
-                        MAX_NUM_FEATURE_POINTS,
-                        SPOOF_targetEnabled,
-                        _SPOOF_target_positions__FLOAT_ARRAY,
-                        SPOOF_vertex_positions,
-                        SPOOF_vertex_normals,
-                        SPOOF_triangle_indices,
-                        SPOOF_feature_point_positions);
-            }
-        }
-        static bool SPOOF_send2motors = true;
-        gui_checkbox("SPOOF_send2motors", &SPOOF_send2motors);
-        if (SPOOF_send2motors) {
-            cpp_send2motors();
-        }
-
-        { // draw scene
-            static int tabs = 0;
-            if (globals.key_pressed['1']) ++tabs;
-            gui_checkbox("DRAGON_SHOW", &DRAGON_SHOW, COW_KEY_TAB);
-            if (!DRAGON_SHOW) {
-                {
-                    if (tabs % 3 == 0) {
-                        sim.draw(P, V, M4_Identity(), &currentState);
-                    } else if (tabs % 3 == 1) { // draw
-                        sim.draw(P * V, &currentState);
-                    } else { // check stuff being sent to C#
-                        eso_begin(PV, SOUP_OUTLINED_TRIANGLES);
-                        eso_color(monokai.black);
-                        for_(triangle_i, cpp_getNumTriangles()) {
-                            for_(d, 3) {
-                                eso_vertex(
-                                        SPOOF_vertex_positions[3 * SPOOF_triangle_indices[3 * triangle_i + d] + 0],
-                                        SPOOF_vertex_positions[3 * SPOOF_triangle_indices[3 * triangle_i + d] + 1],
-                                        SPOOF_vertex_positions[3 * SPOOF_triangle_indices[3 * triangle_i + d] + 2]
-                                        );
-                            }
-                        }
-                        eso_end();
-                    }
-                }
-            } else { // skinning
-                dragonBody.bones = currentBones.data;
-                dragonBody.draw(P, V, globals.Identity);
-
-                { // _dragonHead
-                    // FORNOW: hacky, with few dependencies
-                    vec3 y = -normalized(get(currentState.x, 9 + (NUM_BONES) * 10) - get(currentState.x, 9 + (NUM_BONES - 1) * 10));
-                    vec3 up = { 0.0, 1.0, 0.0 };
-                    vec3 x = cross(y, up);
-                    x = IS_ZERO(squaredNorm(x)) ? V3(1.0, 0.0, 0.0) : normalized(x);
-                    vec3 z = cross(x, y);
-                    vec3 o = get(currentState.x, 9 + (NUM_BONES) * 10);
-                    _dragonHead.draw(P, V, M4_xyzo(x, y, z, o));
-                }
-            }
-
-
-            { // widget
-                bool mouseClickConsumed = false;
-                bool mouseHotConsumed = false;
-                { // SPOOF_targetPositions
-                    for_(featurePointIndex, MAX_NUM_FEATURE_POINTS) {
-                        if (!SPOOF_targetEnabled[featurePointIndex]) continue;
-                        vec3 color = color_kelly(featurePointIndex);
-                        vec3 SPOOF_feature_point_position = { SPOOF_feature_point_positions[3 * featurePointIndex + 0], SPOOF_feature_point_positions[3 * featurePointIndex + 1], SPOOF_feature_point_positions[3 * featurePointIndex + 2] };
-
-                        WidgetResult widgetResult = widget(P, V, featurePointIndex, &SPOOF_targetPositions[featurePointIndex], SPOOF_feature_point_position, color);
-
-                        mouseClickConsumed |= widgetResult.mouseClickConsumed; // FORNOW
-                        mouseHotConsumed |= widgetResult.mouseHotConsumed; // FORNOW
-                        if (widgetResult.pleaseDisableHandle) {
-                            SPOOF_targetEnabled[featurePointIndex] = FALSE;
-                        }
-                        if (widgetResult.recastFeaturePoint) {
-                            castRay(true, featurePointIndex);
-                        }
-                    }
-                }
-
-
-                if (!mouseClickConsumed && !mouseHotConsumed) { // SPOOF_intersection_position
-                    bool pleaseSetFeaturePoint = globals.mouse_left_pressed;
-                    int featurePointIndex; {
-                        for (featurePointIndex = 0; SPOOF_targetEnabled[featurePointIndex]; ++featurePointIndex) {}
-                        ASSERT(featurePointIndex < MAX_NUM_FEATURE_POINTS);
-                    }
-                    CastRayResult castRayResult = castRay(pleaseSetFeaturePoint, featurePointIndex);
-                    if (!globals.mouse_left_held && castRayResult.intersects) draw_ball(P, V, castRayResult.intersection_position, color_kelly(featurePointIndex));
-                    if (castRayResult.intersects && pleaseSetFeaturePoint) {
-                        SPOOF_targetEnabled[featurePointIndex] = TRUE;
-                        SPOOF_targetPositions[featurePointIndex] = castRayResult.intersection_position;
-                    }
-                }
-            }
-
-            { // ceiling
-                real r = 0.3;
-                eso_begin(PV, (tabs % 3 == 0) ? SOUP_QUADS : SOUP_OUTLINED_QUADS);
-                if (tabs % 3 == 0) {
-                    eso_color(1.0, 1.0, 1.0, 0.5);
-                } else {
-                    eso_color(0.0, 0.0, 0.0, 0.5);
-                }
-                eso_vertex( r, 0.0,  r);
-                eso_vertex( r, 0.0, -r);
-                eso_vertex(-r, 0.0, -r);
-                eso_vertex(-r, 0.0,  r);
-                eso_end();
-            }
-
-        }
-
-        { // fornow
-            if (globals.key_held['a']) SPOOF_targetPositions[0] = transformPoint(M4_RotationAboutYAxis(RAD(1)), SPOOF_targetPositions[0]);
-        }
-
-
-        if (1) { // manual sliders
-            for_(j, sim.num_cables) {
-                char buffer[] = "u_X";
-                buffer[2] = char('0' + j);
-                gui_slider(buffer, &currentState.u[j], -(ROBOT_LENGTH / 3), (ROBOT_LENGTH / 3));
-            }
-        }
-
-
-
-        { // FORNOW automated testing
-            if (AUTOMATED_SPEED_TEST__QUITS_AFTER_A_COUPLE_SECONDS) {
-                static real testTime = 0.0;
-                SPOOF_targetPositions[0] += V3(0.003);
-                if (testTime > 2.0) {
-                    exit(1);
-                }
-                testTime += .0167;
-            }
-        }
-    }
-    cpp_exit();
-}
-
-#undef LEN_U
-#undef LEN_X
-
-////////////////////////////////////////////////////////////////////////////////
-
-void main() {
-    omp_set_num_threads(6);
-    APPS {
-        // APP(jones);
-        APP(kaa);
-        // APP(eg_fbo);
-    }
-}
+#endif

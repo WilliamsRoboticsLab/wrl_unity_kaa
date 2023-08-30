@@ -28,9 +28,9 @@ using UnityEngine.Rendering;
 unsafe public class Main : MonoBehaviour {
 
 
-    bool JIM_AUTOMATED_TEST_JIM_AUTOMATED_TEST = false;
-    bool JIM_AUTOMATED_TEST_SINUSOIDS = false;
-    int JIM_AUTOMATED_TEST_PHASE__NOTE_NOT_USED_BY_SINUOSOIDAL_TEST;
+    public bool AUTO_TEST_DO_TEST = true;
+    bool AUTO_TEST_SINUSOIDAL_TEST = true;
+    int _JIM_AUTOMATED_TEST_PHASE__NOTE_NOT_USED_BY_SINUOSOIDAL_TEST;
     float jimAutomatedTestTime = 0.0f;
 
 
@@ -74,6 +74,33 @@ unsafe public class Main : MonoBehaviour {
     void GAME_OBJECT_SET_POSITION(GameObject gameObject, Vector3 position) {
         gameObject.transform.position = position;
     }
+
+    int MODULO(int x, int N) { return (((x) % (N) + (N)) % (N)); } // works on negative numbers
+    Color[] _color_kelly_colors = {
+        new Color(255.0f/255,179.0f/255,  0.0f/255,1.0f),
+        new Color(128.0f/255, 62.0f/255,117.0f/255,1.0f),
+        new Color(255.0f/255,104.0f/255,  0.0f/255,1.0f),
+        new Color(166.0f/255,189.0f/255,215.0f/255,1.0f),
+        new Color(193.0f/255,  0.0f/255, 32.0f/255,1.0f),
+        new Color(206.0f/255,162.0f/255, 98.0f/255,1.0f),
+        new Color(129.0f/255,112.0f/255,102.0f/255,1.0f),
+        new Color(  0.0f/255,125.0f/255, 52.0f/255,1.0f),
+        new Color(246.0f/255,118.0f/255,142.0f/255,1.0f),
+        new Color(  0.0f/255, 83.0f/255,138.0f/255,1.0f),
+        new Color(255.0f/255,122.0f/255, 92.0f/255,1.0f),
+        new Color(83.0f/255,  55.0f/255,122.0f/255,1.0f),
+        new Color(255.0f/255,142.0f/255,  0.0f/255,1.0f),
+        new Color(179.0f/255, 40.0f/255, 81.0f/255,1.0f),
+        new Color(244.0f/255,200.0f/255,  0.0f/255,1.0f),
+        new Color(127.0f/255, 24.0f/255, 13.0f/255,1.0f),
+        new Color(147.0f/255,170.0f/255,  0.0f/255,1.0f),
+        new Color( 89.0f/255, 51.0f/255, 21.0f/255,1.0f),
+        new Color(241.0f/255, 58.0f/255, 19.0f/255,1.0f),
+        new Color( 35.0f/255, 44.0f/255, 22.0f/255,1.0f) };
+    Color ColorKelly(int i) {
+        return _color_kelly_colors[MODULO(i, _color_kelly_colors.Length)];
+    }
+
 
 
     bool inputPressedA;
@@ -465,9 +492,9 @@ unsafe public class Main : MonoBehaviour {
 
         SolveWrapper(); 
 
-        if (JIM_AUTOMATED_TEST_JIM_AUTOMATED_TEST) {
-            CastRayWrapper(new Vector3(0.0f, -0.4f, -1.0f), new Vector3(0.0f, 0.0f, 1.0f), true);
-            if (!JIM_AUTOMATED_TEST_SINUSOIDS) {
+        if (AUTO_TEST_DO_TEST) {
+            CastRayWrapper(new Vector3(0.0f, -0.6f, 1.0f), new Vector3(0.0f, 0.0f, -1.0f), true);
+            if (!AUTO_TEST_SINUSOIDAL_TEST) {
                 widgetTargetGameObjects[0].transform.position = new Vector3(
                         0.2f,
                         widgetTargetGameObjects[0].transform.position.y,
@@ -478,28 +505,28 @@ unsafe public class Main : MonoBehaviour {
     }
 
     void Update () {
-        if (JIM_AUTOMATED_TEST_JIM_AUTOMATED_TEST) {
-            jimAutomatedTestTime += 0.0167f;
-            if (JIM_AUTOMATED_TEST_SINUSOIDS) {
+        if (AUTO_TEST_DO_TEST) {
+            jimAutomatedTestTime += 0.01f;
+            if (AUTO_TEST_SINUSOIDAL_TEST) {
                 widgetTargetGameObjects[0].transform.position = new Vector3(
-                        0.2f * Mathf.Sin(5 * jimAutomatedTestTime),
-                        widgetTargetGameObjects[0].transform.position.y,
-                        widgetTargetGameObjects[0].transform.position.z
+                        Mathf.Min(1.0f, jimAutomatedTestTime) * 0.3f * Mathf.Cos(jimAutomatedTestTime),
+                        -0.4f,
+                        Mathf.Min(1.0f, jimAutomatedTestTime) * 0.3f * Mathf.Sin(jimAutomatedTestTime)
                         );
             } else {
-                if (jimAutomatedTestTime > 0.66f && JIM_AUTOMATED_TEST_PHASE__NOTE_NOT_USED_BY_SINUOSOIDAL_TEST == 0) {
-                    ++JIM_AUTOMATED_TEST_PHASE__NOTE_NOT_USED_BY_SINUOSOIDAL_TEST;
+                if (jimAutomatedTestTime > 0.66f && _JIM_AUTOMATED_TEST_PHASE__NOTE_NOT_USED_BY_SINUOSOIDAL_TEST == 0) {
+                    ++_JIM_AUTOMATED_TEST_PHASE__NOTE_NOT_USED_BY_SINUOSOIDAL_TEST;
                     WidgetDeactivate(0);
-                } else if (jimAutomatedTestTime > 1.33f && JIM_AUTOMATED_TEST_PHASE__NOTE_NOT_USED_BY_SINUOSOIDAL_TEST == 1) {
-                    ++JIM_AUTOMATED_TEST_PHASE__NOTE_NOT_USED_BY_SINUOSOIDAL_TEST;
+                } else if (jimAutomatedTestTime > 1.33f && _JIM_AUTOMATED_TEST_PHASE__NOTE_NOT_USED_BY_SINUOSOIDAL_TEST == 1) {
+                    ++_JIM_AUTOMATED_TEST_PHASE__NOTE_NOT_USED_BY_SINUOSOIDAL_TEST;
                     CastRayWrapper(new Vector3(0.0f, -0.6f, -1.0f), new Vector3(0.0f, 0.0f, 1.0f), true);
                     widgetTargetGameObjects[0].transform.position = new Vector3(
                             -0.2f,
                             widgetTargetGameObjects[0].transform.position.y,
                             widgetTargetGameObjects[0].transform.position.z
                             );
-                } else if (jimAutomatedTestTime > 2.00f && JIM_AUTOMATED_TEST_PHASE__NOTE_NOT_USED_BY_SINUOSOIDAL_TEST == 2) {
-                    ++JIM_AUTOMATED_TEST_PHASE__NOTE_NOT_USED_BY_SINUOSOIDAL_TEST;
+                } else if (jimAutomatedTestTime > 2.00f && _JIM_AUTOMATED_TEST_PHASE__NOTE_NOT_USED_BY_SINUOSOIDAL_TEST == 2) {
+                    ++_JIM_AUTOMATED_TEST_PHASE__NOTE_NOT_USED_BY_SINUOSOIDAL_TEST;
                     WidgetDeactivate(0);
                 }
             }
@@ -680,7 +707,6 @@ unsafe public class Main : MonoBehaviour {
                 UpdateCylinderForString(cable_positionsV3[viaIndex], cable_positionsV3[viaIndex+1], cables[cableIndex][substringIndex]);
                 for(int objectIndex = 0; objectIndex < 3; objectIndex++){
                     Material mat = cables[cableIndex][substringIndex][objectIndex].GetComponent<MeshRenderer>().material;
-                    //print(tensions[cableIndex]);
                     mat.color = new Color(tensions[cableIndex]*6.0f, tensions[cableIndex]*6.0f, -tensions[cableIndex]*16.0f+1);
                 }
                 viaIndex++;

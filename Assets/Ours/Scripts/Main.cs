@@ -101,6 +101,19 @@ unsafe public class Main : MonoBehaviour {
         return _color_kelly_colors[MODULO(i, _color_kelly_colors.Length)];
     }
 
+    Vector3 _color_plasma_0 = new Vector3(  0.05873234392399f,    0.0233367089256f,   0.54334018267487f);
+    Vector3 _color_plasma_1 = new Vector3(  2.17651463419595f,    0.2383834171260f,   0.75396045997840f);
+    Vector3 _color_plasma_2 = new Vector3( -2.68946047645803f,   -7.4558511357389f,   3.11079993971708f);
+    Vector3 _color_plasma_3 = new Vector3(  6.13034834589360f,   42.3461881477227f, -28.51885465332158f);
+    Vector3 _color_plasma_4 = new Vector3(-11.10743619062271f,  -82.6663110942804f,  60.13984767418263f);
+    Vector3 _color_plasma_5 = new Vector3( 10.02306557647065f,   71.4136177009534f, -54.07218655560067f);
+    Vector3 _color_plasma_6 = new Vector3( -3.65871384277778f, -22.93153465461149f,  18.19190778539828f);
+    Color ColorPlasma(float t) {
+        t = Mathf.Clamp(t, 0.0f, 1.0f);
+        Vector3 result = _color_plasma_0+t*(_color_plasma_1+t*(_color_plasma_2+t*(_color_plasma_3+t*(_color_plasma_4+t*(_color_plasma_5+t*_color_plasma_6)))));
+        return new Color(result.x, result.y, result.z, 1.0f);
+    }
+
 
 
     bool inputPressedA;
@@ -461,6 +474,8 @@ unsafe public class Main : MonoBehaviour {
 
 
     void Awake () {
+        Application.targetFrameRate = 60;
+
         LoadDLL();
 
         // init(true);
@@ -707,7 +722,9 @@ unsafe public class Main : MonoBehaviour {
                 UpdateCylinderForString(cable_positionsV3[viaIndex], cable_positionsV3[viaIndex+1], cables[cableIndex][substringIndex]);
                 for(int objectIndex = 0; objectIndex < 3; objectIndex++){
                     Material mat = cables[cableIndex][substringIndex][objectIndex].GetComponent<MeshRenderer>().material;
-                    mat.color = new Color(tensions[cableIndex]*6.0f, tensions[cableIndex]*6.0f, -tensions[cableIndex]*16.0f+1);
+                    Color color = ColorPlasma(0.3f + 15.0f * tensions[cableIndex]); 
+                    mat.color = color;
+                    mat.SetColor("_EmissionColor", color);
                 }
                 viaIndex++;
             }

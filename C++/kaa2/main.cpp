@@ -160,15 +160,21 @@ IndexedTriangleMesh3D dragonBody;
 typedef FixedSizeSelfDestructingArray<mat4> Bones;
 const int DRAGON_NUM_BONES = MESH_NUMBER_OF_NODE_LAYERS - 1;
 vec3 boneOriginsRest[DRAGON_NUM_BONES + 1]; // ? okay FORNOW
+FixedSizeSelfDestructingArray<vec3> getBoneOrigins(SDVector &x) {
+    FixedSizeSelfDestructingArray<vec3> result(DRAGON_NUM_BONES + 1);
+    for_(j, result.N) {
+        result[j] = get(x, 9 + j * 10);
+    }
+    return result;
+}
 Bones getBones(SDVector &x) {
     Bones result(DRAGON_NUM_BONES);
-    vec3 boneOrigins[DRAGON_NUM_BONES + 1];
+    FixedSizeSelfDestructingArray<vec3> boneOrigins = getBoneOrigins(x);
     vec3 boneNegativeYAxis[DRAGON_NUM_BONES];
     vec3 bonePositiveXAxis[DRAGON_NUM_BONES];
     {
         vec3 boneXAxisFeaturePoint[DRAGON_NUM_BONES + 1]; {
-            for_(j, _COUNT_OF(boneOrigins)) {
-                boneOrigins              [j] = get(x, 9 + j * 10);
+            for_(j, boneOrigins.N) {
                 boneXAxisFeaturePoint    [j] = get(x, 0 + j * 10);
             }
         }
@@ -344,6 +350,64 @@ delegate void cpp_reset() {
 }
 
 
+
+#define _CSV_MAX_REALS 10000000
+long _csv_start_time;
+real _csv_buffer[_CSV_MAX_REALS];
+int _csv_index;
+void csv_init() {
+    _csv_start_time = util_timestamp_in_milliseconds();
+}
+void csv_solve(SDVector &x) {
+    FixedSizeSelfDestructingArray<vec3> boneOrigins = getBoneOrigins(x); // FORNOW
+    _csv_buffer[_csv_index++] = (util_timestamp_in_milliseconds() - _csv_start_time) / 1000.0;
+    for_(i, boneOrigins.N) {
+        bool rigidBody = false;
+        // FORNOW: TODO: FIX
+        rigidBody |= (i == 0);
+        rigidBody |= (i == MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_UPPER_SEGMENT);
+        rigidBody |= (i == MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_UPPER_SEGMENT + MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_LOWER_SEGMENT);
+        rigidBody |= (i == MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_UPPER_SEGMENT + 2 * MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_LOWER_SEGMENT);
+        rigidBody |= (i == MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_UPPER_SEGMENT + 3 * MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_LOWER_SEGMENT);
+        rigidBody |= (i == MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_UPPER_SEGMENT + 4 * MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_LOWER_SEGMENT);
+        if (!rigidBody) continue;
+        for_(d, 3) _csv_buffer[_csv_index++] = boneOrigins[i][d];
+    }
+}
+void csv_exit() {
+    char path[256];
+    GetCurrentDirectory(_COUNT_OF(path), path);
+    strcat(path, "\\spine.csv");
+    FILE *file = fopen(path, "w");
+    int CSV_NUMBER_OF_RIGID_BODIES = (ROBOT_NUMBER_OF_SEGMENTS + 1);
+    int CSV_NUM_COLUMNS = 1 + 3 * CSV_NUMBER_OF_RIGID_BODIES;
+    {
+        fprintf(file, "time (seconds),");
+        for_(i, CSV_NUMBER_OF_RIGID_BODIES) {
+            fprintf(file, "x_%d,", i);
+            fprintf(file, "y_%d,", i);
+            fprintf(file, "z_%d,", i);
+        }
+        fprintf(file, "\n");
+    }
+    int CSV_NUM_ROWS = _csv_index / CSV_NUM_COLUMNS;
+    {
+        int k = 0;
+        for_(r, CSV_NUM_ROWS) {
+            for_(c, CSV_NUM_COLUMNS) {
+                fprintf(file, "%lf,", _csv_buffer[k++]);
+            }
+            fprintf(file, "\n");
+        }
+    }
+    fclose(file);
+}
+
+
+
+
+
+
 bool HACK_RUNNING_ON_UNITY;
 
 delegate void cpp_init(bool _DRAGON_DRIVING = false) {
@@ -481,26 +545,9 @@ delegate void cpp_init(bool _DRAGON_DRIVING = false) {
 
     if (0) { // set up skinned mesh
         { //CARL load meshes
-            char pwd[256];
-            GetCurrentDirectory(_COUNT_OF(pwd), pwd);
-            // printf("\n\n");
-            // printf(pwd);
-            // printf("\n");
-
-            // imagine we knew what directory we were in
-
             char headPath[256];
             char bodyPath[256];
-            strcpy(headPath, pwd);
-            strcpy(bodyPath, pwd);
-
-            #ifdef JIM_DLL
-            strcat(headPath, "\\Assets\\_Objects\\head.obj");
-            strcat(bodyPath, "\\Assets\\_Objects\\body.obj");
-            #else
-            strcat(headPath, "\\dragon_head.obj");
-            strcat(bodyPath, "\\dragon_body.obj");
-            #endif
+            ASSERT(0);
 
             // printf("HeadPath: %s", headPath);
             // printf("\n");
@@ -573,10 +620,12 @@ delegate void cpp_init(bool _DRAGON_DRIVING = false) {
 
     cpp_reset();
 
+    csv_init();
 }
 
 delegate void cpp_exit() {
     dxl_exit();
+    csv_exit();
 }
 
 
@@ -849,6 +898,8 @@ delegate void cpp_solve(
         }
     }
 
+    csv_solve(currentState.x); // FORNOW
+
     { // marshall mesh
         SDVector vertex_normals = sim.get_vertex_normals(currentState.x);
         for_(k, LEN_X) {
@@ -864,6 +915,8 @@ delegate void cpp_solve(
             for_(d, 3) ((float *) feature_point_positions__FLOAT3__ARRAY)[3 * indexOfFeaturePointToSet + d] = UnityVertexAttributeFloat(_ZZZ(d) * tmp[d]);
         }
     }
+
+    ASSERT(currentBones.N > 0);
 }
 
 delegate void cpp_send2motors() {

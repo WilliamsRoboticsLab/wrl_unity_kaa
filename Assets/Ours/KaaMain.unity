@@ -1408,7 +1408,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 64e18da67b415c747acf5e72349852f0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  AUTO_TEST_DO_TEST: 1
+  AUTO_TEST_DO_TEST: 0
   leftHand: {fileID: 334448943580695417}
   rightHand: {fileID: 509576332375414770}
   dragon_head: {fileID: 442200863}

@@ -261,7 +261,7 @@ unsafe public class Main : MonoBehaviour {
                 rayDirection.z,
                 NativeArrayUnsafeUtility.GetUnsafePtr(_castRayIntersectionPosition),
                 pleaseSetFeaturePoint,
-                widgetNumberOfActiveWidgets);
+                widgetNextIndexToActivateInto());
         if (result.hit) {
             result.intersectionPosition = new Vector3(_castRayIntersectionPosition[0], _castRayIntersectionPosition[1], _castRayIntersectionPosition[2]);
             if (pleaseSetFeaturePoint) {
@@ -272,6 +272,15 @@ unsafe public class Main : MonoBehaviour {
     }
     NativeArray<float> _castRayIntersectionPosition;
 
+    int widgetNextIndexToActivateInto() {
+        for (int i = 0; i < widgetMaximumNumberOfActiveWidgets; ++i) {
+            if (!GAME_OBJECT_IS_DRAWING(widgetWidgetGameObjects[i])) {
+                return i;
+            }
+        }
+        ASSERT(false);
+        return -1;
+    }
 
     GameObject widgetWidgetsParentObject;
     int widgetNumberOfActiveWidgets;
@@ -280,9 +289,12 @@ unsafe public class Main : MonoBehaviour {
     GameObject[] widgetTargetGameObjects;
     Rigidbody[] widgetTargetRigidbodies;
     GameObject[] widgetFeaturePointGameObjects;
+    GameObject[] widgetLineGameObjects;
+    LineRenderer[] widgetLineRenderers;
     NativeArray<int> _widgetTargetEnabled;
     NativeArray<float3> _widgetTargetPositions;
     NativeArray<float3> _widgetFeaturePointPositions; 
+    GameObject widgetMainCamera__FOR_LINE_RENDERER_SCALING;
     void WidgetAwake() {
         widgetWidgetsParentObject = GAME_OBJECT_CREATE("widgetWidgetsParentObject");
         widgetNumberOfActiveWidgets = 0;
@@ -303,30 +315,52 @@ unsafe public class Main : MonoBehaviour {
         }
         widgetFeaturePointGameObjects = new GameObject[widgetMaximumNumberOfActiveWidgets];
         {
-            GameObject prefabFeaturePoint  = PREFAB_LOAD("prefabFeaturePoint");
+            GameObject prefabFeaturePoint = PREFAB_LOAD("prefabFeaturePoint");
             for (int i = 0; i < widgetMaximumNumberOfActiveWidgets; ++i) {
                 widgetFeaturePointGameObjects[i] = PREFAB_INSTANTIATE(prefabFeaturePoint, "featurePoint " + i, widgetWidgetGameObjects[i]);
             }
         }
+        widgetLineGameObjects = new GameObject[widgetMaximumNumberOfActiveWidgets];
+        widgetLineRenderers = new LineRenderer[widgetMaximumNumberOfActiveWidgets];
+        {
+            GameObject prefabLine = PREFAB_LOAD("prefabLine");
+            for (int i = 0; i < widgetMaximumNumberOfActiveWidgets; ++i) {
+                widgetLineGameObjects[i] = PREFAB_INSTANTIATE(prefabLine, "line " + i, widgetWidgetGameObjects[i]);
+                widgetLineRenderers[i] = widgetLineGameObjects[i].GetComponent<LineRenderer>();
+                widgetLineRenderers[i].startColor = new Color(0.0f, 1.0f, 1.0f, 0.66f);
+                widgetLineRenderers[i].endColor = new Color(1.0f, 0.6f, 0.0f, 0.66f);
+            }
+
+        }
         _widgetTargetEnabled = new NativeArray<int>(widgetMaximumNumberOfActiveWidgets, Allocator.Persistent);
         _widgetTargetPositions = new NativeArray<float3>(widgetMaximumNumberOfActiveWidgets, Allocator.Persistent);
         _widgetFeaturePointPositions = new NativeArray<float3>(widgetMaximumNumberOfActiveWidgets, Allocator.Persistent);
+        widgetMainCamera__FOR_LINE_RENDERER_SCALING = GameObject.Find("Main Camera");
     }
     void WidgetActivate(Vector3 position) {
-        GAME_OBJECT_DRAW(widgetWidgetGameObjects[widgetNumberOfActiveWidgets], true);
-        GAME_OBJECT_SET_POSITION(widgetTargetGameObjects[widgetNumberOfActiveWidgets], position);
-        GAME_OBJECT_SET_POSITION(widgetFeaturePointGameObjects[widgetNumberOfActiveWidgets], position);
+        ASSERT(widgetNumberOfActiveWidgets < widgetMaximumNumberOfActiveWidgets);
+        int widgetIndex = widgetNextIndexToActivateInto();
+        GAME_OBJECT_DRAW(widgetWidgetGameObjects[widgetIndex], true);
+        GAME_OBJECT_SET_POSITION(widgetTargetGameObjects[widgetIndex], position);
+        GAME_OBJECT_SET_POSITION(widgetFeaturePointGameObjects[widgetIndex], position);
         ++widgetNumberOfActiveWidgets;
     }
     void WidgetDeactivate(int i) {
-        // arrdelswap
         ASSERT((0 <= i) && (i < widgetMaximumNumberOfActiveWidgets));
         ASSERT(GAME_OBJECT_IS_DRAWING(widgetWidgetGameObjects[i]));
         GAME_OBJECT_DRAW(widgetWidgetGameObjects[i], false);
         --widgetNumberOfActiveWidgets;
-        GameObject tmp = widgetWidgetGameObjects[i];
-        widgetWidgetGameObjects[i] = widgetWidgetGameObjects[widgetNumberOfActiveWidgets];
-        widgetWidgetGameObjects[widgetNumberOfActiveWidgets] = tmp;
+    }
+    void WidgetUpdate() {
+        for (int i = 0; i < widgetMaximumNumberOfActiveWidgets; ++i) {
+            Vector3 a = widgetFeaturePointGameObjects[i].transform.position;
+            Vector3 b = widgetTargetGameObjects[i].transform.position;
+            Vector3 o = widgetMainCamera__FOR_LINE_RENDERER_SCALING.transform.position;
+            widgetLineRenderers[i].SetPosition(0, a);
+            widgetLineRenderers[i].SetPosition(1, b);
+            widgetLineRenderers[i].startWidth = 0.0166f / 2f + Vector3.Distance(o, a) / 33.0f;
+            widgetLineRenderers[i].endWidth   = 0.0333f / 2f + Vector3.Distance(o, b) / 33.0f;
+        }
     }
 
 
@@ -350,9 +384,8 @@ unsafe public class Main : MonoBehaviour {
         float radius = 0.025f;
         int result = -1;
         for (int i = 0; i < widgetMaximumNumberOfActiveWidgets; ++i) {
+            if (!GAME_OBJECT_IS_DRAWING(widgetWidgetGameObjects[i])) { continue; }
             GameObject target = widgetTargetGameObjects[i];
-            if (!target.activeSelf) { continue; }
-
             Vector3 center = target.transform.position;
             Vector3 oc = origin - center;
             float a = Vector3.Dot(direction, direction);
@@ -508,10 +541,10 @@ unsafe public class Main : MonoBehaviour {
         SolveWrapper(); 
 
         if (AUTO_TEST_DO_TEST) {
-            CastRayWrapper(new Vector3(0.0f, -0.6f, 1.0f), new Vector3(0.0f, 0.0f, -1.0f), true);
+            CastRayWrapper(new Vector3(0.0f, -0.6f, -1.0f), new Vector3(0.0f, 0.0f, 1.0f), true);
             if (!AUTO_TEST_SINUSOIDAL_TEST) {
                 widgetTargetGameObjects[0].transform.position = new Vector3(
-                        0.2f,
+                        0.5f,
                         widgetTargetGameObjects[0].transform.position.y,
                         widgetTargetGameObjects[0].transform.position.z
                         );
@@ -529,21 +562,21 @@ unsafe public class Main : MonoBehaviour {
                         Mathf.Min(1.0f, jimAutomatedTestTime) * 0.3f * Mathf.Sin(jimAutomatedTestTime)
                         );
             } else {
-                if (jimAutomatedTestTime > 0.66f && _JIM_AUTOMATED_TEST_PHASE__NOTE_NOT_USED_BY_SINUOSOIDAL_TEST == 0) {
-                    ++_JIM_AUTOMATED_TEST_PHASE__NOTE_NOT_USED_BY_SINUOSOIDAL_TEST;
-                    WidgetDeactivate(0);
-                } else if (jimAutomatedTestTime > 1.33f && _JIM_AUTOMATED_TEST_PHASE__NOTE_NOT_USED_BY_SINUOSOIDAL_TEST == 1) {
-                    ++_JIM_AUTOMATED_TEST_PHASE__NOTE_NOT_USED_BY_SINUOSOIDAL_TEST;
-                    CastRayWrapper(new Vector3(0.0f, -0.6f, -1.0f), new Vector3(0.0f, 0.0f, 1.0f), true);
-                    widgetTargetGameObjects[0].transform.position = new Vector3(
-                            -0.2f,
-                            widgetTargetGameObjects[0].transform.position.y,
-                            widgetTargetGameObjects[0].transform.position.z
-                            );
-                } else if (jimAutomatedTestTime > 2.00f && _JIM_AUTOMATED_TEST_PHASE__NOTE_NOT_USED_BY_SINUOSOIDAL_TEST == 2) {
-                    ++_JIM_AUTOMATED_TEST_PHASE__NOTE_NOT_USED_BY_SINUOSOIDAL_TEST;
-                    WidgetDeactivate(0);
-                }
+                // if (jimAutomatedTestTime > 0.66f && _JIM_AUTOMATED_TEST_PHASE__NOTE_NOT_USED_BY_SINUOSOIDAL_TEST == 0) {
+                //     ++_JIM_AUTOMATED_TEST_PHASE__NOTE_NOT_USED_BY_SINUOSOIDAL_TEST;
+                //     WidgetDeactivate(0);
+                // } else if (jimAutomatedTestTime > 1.33f && _JIM_AUTOMATED_TEST_PHASE__NOTE_NOT_USED_BY_SINUOSOIDAL_TEST == 1) {
+                //     ++_JIM_AUTOMATED_TEST_PHASE__NOTE_NOT_USED_BY_SINUOSOIDAL_TEST;
+                //     CastRayWrapper(new Vector3(0.0f, -0.6f, -1.0f), new Vector3(0.0f, 0.0f, 1.0f), true);
+                //     widgetTargetGameObjects[0].transform.position = new Vector3(
+                //             -0.2f,
+                //             widgetTargetGameObjects[0].transform.position.y,
+                //             widgetTargetGameObjects[0].transform.position.z
+                //             );
+                // } else if (jimAutomatedTestTime > 2.00f && _JIM_AUTOMATED_TEST_PHASE__NOTE_NOT_USED_BY_SINUOSOIDAL_TEST == 2) {
+                //     ++_JIM_AUTOMATED_TEST_PHASE__NOTE_NOT_USED_BY_SINUOSOIDAL_TEST;
+                //     WidgetDeactivate(0);
+                // }
             }
         }
 
@@ -553,13 +586,13 @@ unsafe public class Main : MonoBehaviour {
         { // interactionDotLeft, interactionDotRight
             {
                 CastRayResult castRayResult = CastRayWrapper(inputLeftRayOrigin, inputLeftRayDirection, false);
-                interactionDotLeft.SetActive(castRayResult.hit);
+                interactionDotLeft.SetActive(castRayResult.hit && (specialInputLeftRayHotTargetIndex == -1));
                 if (castRayResult.hit) { interactionDotLeft.transform.position = castRayResult.intersectionPosition; }
             }
 
             {
                 CastRayResult castRayResult = CastRayWrapper(inputRightRayOrigin, inputRightRayDirection, false);
-                interactionDotRight.SetActive(castRayResult.hit);
+                interactionDotRight.SetActive(castRayResult.hit && (specialInputRightRayHotTargetIndex == -1));
                 if (castRayResult.hit) { interactionDotRight.transform.position = castRayResult.intersectionPosition; }
             }
         }
@@ -567,10 +600,18 @@ unsafe public class Main : MonoBehaviour {
         { // core UI
             if (inputPressedMenu) {
                 solving = !solving;
-            } else if (inputPressedLeftTrigger) {
-                CastRayWrapper(inputLeftRayOrigin, inputLeftRayDirection, true);
-            } else if (inputPressedRightTrigger) {
-                CastRayWrapper(inputRightRayOrigin, inputRightRayDirection, true);
+            } else if (inputPressedLeftTrigger && !inputHeldLeftGrip) {
+                if (specialInputLeftRayHotTargetIndex == -1) {
+                    CastRayWrapper(inputLeftRayOrigin, inputLeftRayDirection, true);
+                } else {
+                    WidgetDeactivate(specialInputLeftRayHotTargetIndex);
+                }
+            } else if (inputPressedRightTrigger && !inputHeldRightGrip) {
+                if (specialInputRightRayHotTargetIndex == -1) {
+                    CastRayWrapper(inputRightRayOrigin, inputRightRayDirection, true);
+                } else {
+                    WidgetDeactivate(specialInputRightRayHotTargetIndex);
+                }
             } else {
                 if (specialInputLeftRayEnteredTarget ) { UnityEngine.XR.InputDevices.GetDeviceAtXRNode(UnityEngine.XR.XRNode. LeftHand).SendHapticImpulse(0, 0.3f, 0.15f); }
                 if (specialInputRightRayEnteredTarget) { UnityEngine.XR.InputDevices.GetDeviceAtXRNode(UnityEngine.XR.XRNode.RightHand).SendHapticImpulse(0, 0.3f, 0.15f); }
@@ -590,12 +631,14 @@ unsafe public class Main : MonoBehaviour {
 
         if (solving) {
             SolveWrapper();
-            UpdateCables();
         }
 
         if (sending2motors) {
             send2motors();
         }
+
+        UpdateCables();
+        WidgetUpdate();
 
         dragonMeshManager.UpdateAll();
     }

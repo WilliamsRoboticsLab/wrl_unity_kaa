@@ -588,6 +588,8 @@ unsafe public class Main : MonoBehaviour {
         InputUpdate();
         SpecialInputUpdate();
 
+        if (inputPressedX) { solving = !solving; }
+
         { // interactionDotLeft, interactionDotRight
             {
                 CastRayResult castRayResult = CastRayWrapper(inputLeftRayOrigin, inputLeftRayDirection, false);

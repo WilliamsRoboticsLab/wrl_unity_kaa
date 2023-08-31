@@ -479,7 +479,7 @@ delegate void cpp_init(bool _DRAGON_DRIVING = false) {
 
     sim.getNext(&currentState); // FORNOW: global_U_xx
 
-    { // set up skinned mesh
+    if (0) { // set up skinned mesh
         { //CARL load meshes
             char pwd[256];
             GetCurrentDirectory(_COUNT_OF(pwd), pwd);

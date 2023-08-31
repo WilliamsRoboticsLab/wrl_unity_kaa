@@ -788,11 +788,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 64e18da67b415c747acf5e72349852f0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  AUTO_TEST_DO_TEST: 1
   leftHand: {fileID: 0}
   rightHand: {fileID: 0}
-  dragon_head: {fileID: 0}
-  dragon_body: {fileID: 0}
   cablesParentObject: {fileID: 0}
 --- !u!23 &537540825
 MeshRenderer:
@@ -1408,11 +1405,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 64e18da67b415c747acf5e72349852f0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  AUTO_TEST_DO_TEST: 0
   leftHand: {fileID: 334448943580695417}
   rightHand: {fileID: 509576332375414770}
-  dragon_head: {fileID: 442200863}
-  dragon_body: {fileID: 1045114822}
   cablesParentObject: {fileID: 1938184893}
 --- !u!23 &967001420
 MeshRenderer:
@@ -3494,7 +3488,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 8059801596075752103, guid: 4e660da2419d1614198b2c073ddf863d, type: 3}
       propertyPath: m_LocalPosition.z
-      value: -0.5
+      value: -1.5
       objectReference: {fileID: 0}
     - target: {fileID: 8059801596075752103, guid: 4e660da2419d1614198b2c073ddf863d, type: 3}
       propertyPath: m_LocalRotation.w

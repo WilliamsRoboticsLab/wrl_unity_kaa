@@ -46,6 +46,7 @@ bool AUTOMATED_SPEED_TEST__QUITS_AFTER_A_COUPLE_SECONDS = false;
 const int  MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_UPPER_SEGMENT = 3;
 const int  MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_LOWER_SEGMENT = 2;
 const bool  INCLUDE_DUMMY_SEGMENT                             = false; // FORNOW: bottom segment always 1 stack
+const bool  INCLUDE_PYRAMID_CAP                                   = true;  // Just one additional node
 
 int IK_MAX_LINE_SEARCH_STEPS = 8;
 
@@ -158,12 +159,16 @@ bool initialized;
 IndexedTriangleMesh3D _dragonHead;
 IndexedTriangleMesh3D dragonBody;
 typedef FixedSizeSelfDestructingArray<mat4> Bones;
-const int DRAGON_NUM_BONES = MESH_NUMBER_OF_NODE_LAYERS - 1;
+const int DRAGON_NUM_BONES = MESH_NUMBER_OF_NODE_LAYERS - 1 + (INCLUDE_PYRAMID_CAP ? 1 : 0);
 vec3 boneOriginsRest[DRAGON_NUM_BONES + 1]; // ? okay FORNOW
 FixedSizeSelfDestructingArray<vec3> getBoneOrigins(SDVector &x) {
     FixedSizeSelfDestructingArray<vec3> result(DRAGON_NUM_BONES + 1);
     for_(j, result.N) {
-        result[j] = get(x, 9 + j * 10);
+        if (j != result.N - 1) {
+            result[j] = get(x, 9 + j * 10);
+        } else {
+            result[j] = get(x, sim.num_nodes - 1);
+        }
     }
     return result;
 }
@@ -175,7 +180,7 @@ Bones getBones(SDVector &x) {
     {
         vec3 boneXAxisFeaturePoint[DRAGON_NUM_BONES + 1]; {
             for_(j, boneOrigins.N) {
-                boneXAxisFeaturePoint    [j] = get(x, 0 + j * 10);
+                boneXAxisFeaturePoint[j] = get(x, 0 + j * 10);
             }
         }
         {
@@ -355,23 +360,30 @@ delegate void cpp_reset() {
 long _csv_start_time;
 real _csv_buffer[_CSV_MAX_REALS];
 int _csv_index;
-void csv_init() {
-    _csv_start_time = util_timestamp_in_milliseconds();
-}
+bool _csv_initialized;
 void csv_solve(SDVector &x) {
+    if (!_csv_initialized) {
+        _csv_initialized = true;
+        _csv_start_time = util_timestamp_in_milliseconds();
+    }
     FixedSizeSelfDestructingArray<vec3> boneOrigins = getBoneOrigins(x); // FORNOW
     _csv_buffer[_csv_index++] = (util_timestamp_in_milliseconds() - _csv_start_time) / 1000.0;
     for_(i, boneOrigins.N) {
-        bool rigidBody = false;
-        // FORNOW: TODO: FIX
-        rigidBody |= (i == 0);
-        rigidBody |= (i == MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_UPPER_SEGMENT);
-        rigidBody |= (i == MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_UPPER_SEGMENT + MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_LOWER_SEGMENT);
-        rigidBody |= (i == MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_UPPER_SEGMENT + 2 * MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_LOWER_SEGMENT);
-        rigidBody |= (i == MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_UPPER_SEGMENT + 3 * MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_LOWER_SEGMENT);
-        rigidBody |= (i == MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_UPPER_SEGMENT + 4 * MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_LOWER_SEGMENT);
-        if (!rigidBody) continue;
-        for_(d, 3) _csv_buffer[_csv_index++] = boneOrigins[i][d];
+        bool isMarkerRigidBodyLayer = false; {
+            int cumm = 0;
+            isMarkerRigidBodyLayer |= (i == cumm);
+            for____(ROBOT_NUMBER_OF_UPPER_SEGMENTS) {
+                cumm += MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_UPPER_SEGMENT;
+                isMarkerRigidBodyLayer |= (i == cumm);
+            }
+            for____(ROBOT_NUMBER_OF_LOWER_SEGMENTS) {
+                cumm += MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_LOWER_SEGMENT;
+                isMarkerRigidBodyLayer |= (i == cumm);
+            }
+            isMarkerRigidBodyLayer |= (i == boneOrigins.N - 1);
+        }
+        if (!isMarkerRigidBodyLayer) continue;
+        for_(d, 3) if (_csv_index < _CSV_MAX_REALS) _csv_buffer[_csv_index++] = boneOrigins[i][d];
     }
 }
 void csv_exit() {
@@ -379,7 +391,7 @@ void csv_exit() {
     GetCurrentDirectory(_COUNT_OF(path), path);
     strcat(path, "\\spine.csv");
     FILE *file = fopen(path, "w");
-    int CSV_NUMBER_OF_RIGID_BODIES = (ROBOT_NUMBER_OF_SEGMENTS + 1);
+    int CSV_NUMBER_OF_RIGID_BODIES = (ROBOT_NUMBER_OF_SEGMENTS + 1) + (INCLUDE_PYRAMID_CAP ? 1 : 0);
     int CSV_NUM_COLUMNS = 1 + 3 * CSV_NUMBER_OF_RIGID_BODIES;
     {
         fprintf(file, "time (seconds),");
@@ -463,6 +475,10 @@ delegate void cpp_init(bool _DRAGON_DRIVING = false) {
                     length += ROBOT_SEGMENT_LENGTH;
                 }
             }
+
+            if (INCLUDE_PYRAMID_CAP) {
+                sbuff_push_back(&X, V3(0.0, -length, 0.0));
+            }
         }
 
         StretchyBuffer<Tet> tets = {}; {
@@ -479,6 +495,18 @@ delegate void cpp_init(bool _DRAGON_DRIVING = false) {
                     sbuff_push_back(&tets, { a, b, c, d       });
                     sbuff_push_back(&tets, {    b, c, d, e    });
                     sbuff_push_back(&tets, {       c, d, e, f });
+                }
+            }
+
+            if (INCLUDE_PYRAMID_CAP) {
+                int _c = MESH_NUMBER_OF_NODE_LAYERS - 1;
+                int c = (1 + _c) * MESH_NUMBER_OF_NODES_PER_NODE_LAYER - 1; // center of slice
+                int o = _c * MESH_NUMBER_OF_NODES_PER_NODE_LAYER;
+                int t = X.length - 1; // tip
+                for_line_loop_(_a, _b, MESH_NUMBER_OF_ANGULAR_SECTIONS) {
+                    int a = o + _a;
+                    int b = o + _b;
+                    sbuff_push_back(&tets, { a, b, c, t });
                 }
             }
         }
@@ -619,8 +647,6 @@ delegate void cpp_init(bool _DRAGON_DRIVING = false) {
 
 
     cpp_reset();
-
-    csv_init();
 }
 
 delegate void cpp_exit() {

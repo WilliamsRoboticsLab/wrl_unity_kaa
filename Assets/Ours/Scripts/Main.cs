@@ -505,9 +505,12 @@ unsafe public class Main : MonoBehaviour {
     Vector3[] cable_positionsV3;
 
 
+    GameObject cameraOffset;
     void Awake () {
         Application.targetFrameRate = 60;
         LoadDLL();
+
+        cameraOffset = GameObject.Find("CameraOffset");
 
         // init(true);
         init(false);
@@ -589,6 +592,8 @@ unsafe public class Main : MonoBehaviour {
         SpecialInputUpdate();
 
         if (inputPressedX) { solving = !solving; }
+        if (inputHeldB) { cameraOffset.transform.position = new Vector3(cameraOffset.transform.position.x, cameraOffset.transform.position.y + .01f, cameraOffset.transform.position.z); }
+        if (inputHeldA) { cameraOffset.transform.position = new Vector3(cameraOffset.transform.position.x, cameraOffset.transform.position.y - .01f, cameraOffset.transform.position.z); }
 
         { // interactionDotLeft, interactionDotRight
             {

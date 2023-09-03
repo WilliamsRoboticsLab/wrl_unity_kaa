@@ -1,4 +1,3 @@
-// TODO: balloons.txt
 // TODO: unity_config.txt (circle test)
 // TODO: dump u as well
 
@@ -261,7 +260,7 @@ int balloon_num_balloons;
 vec3 balloon_positions[BALLOON_MAXIMUM_NUMBER_OF_BALLOONS];
 real balloon_radius = 0.1;
 void balloon_init() {
-    FILE *file = dll_agnostic_fopen("balloons.txt", "r");
+    FILE *file = dll_agnostic_fopen("balloon_config.txt", "r");
     char buffer[4096];
     while (fgets(buffer, _COUNT_OF(buffer), file) != NULL) {
         ASSERT(balloon_num_balloons < BALLOON_MAXIMUM_NUMBER_OF_BALLOONS);
@@ -270,7 +269,13 @@ void balloon_init() {
     }
     fclose(file);
 }
-// cpp_get_balloon_positions // TODO: ZZZ(...)
+delegate void cpp_balloon_positions(void *balloons) {
+    for_(i, balloon_num_balloons) {
+        for_(d, 3) {
+            ((UnityVertexAttributeFloat*) balloons)[3 * i + d] = (UnityVertexAttributeFloat)(balloon_positions[i][d]);
+        }
+    }
+}
 
 
 

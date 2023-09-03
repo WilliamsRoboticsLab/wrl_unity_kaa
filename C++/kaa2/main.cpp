@@ -1,52 +1,10 @@
-// TODO: GPU picking
-// TODO: make line and spheres show up through the transparent mesh as well
-// TODO: see if you can run cow while running an app in VR
-// TODO: floor
-// TODO: revisit the hessian (kim-style SparseMatrix parallel add?)
-// TODO: talking to motors
-// TODO: linear blend skinning in a vertex shader
-//       get space fish back up and running
-// TODO: #define in build.bat for gui stuff
-// TODO: split IK line search between frames
-// TODO: dFdu sparse matrix (why did this fail last time?)
-// TODO: should x be a FixedSizeSelfDestructingArray<vec3>?
-// // (waiting on josie) real-world trajectory Figure
-// play more with sim params
-// play more with ik weights
-// // visualization
-// pipe and sphere widget
-// cable slack visualization
-// // fun
-// ordering juggling clubs
-// // cow
-// port MIN, MAX, etc. to be functions
-
-
-
-
-
-
-
-
-// bones
-
-
-// C++
-// - IK
-
-// C#
-// - controllers
-// - draw
-// -- (GPU)
-// --- "skinning" - vertex shader
-
-
-bool AUTOMATED_SPEED_TEST__QUITS_AFTER_A_COUPLE_SECONDS = false;
+// TODO: balloons.txt
+// TODO: unity_config.txt
 
 const int  MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_UPPER_SEGMENT = 3;
 const int  MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_LOWER_SEGMENT = 2;
 const bool  INCLUDE_DUMMY_SEGMENT                             = false; // FORNOW: bottom segment always 1 stack
-const bool  INCLUDE_PYRAMID_CAP                                   = true;  // Just one additional node
+const bool  INCLUDE_PYRAMID_CAP                               = true;  // Just one additional node
 
 int IK_MAX_LINE_SEARCH_STEPS = 8;
 
@@ -103,6 +61,16 @@ IntersectionResult ray_mesh_intersection(vec3 ray_origin, vec3 ray_direction, co
 #include "fbo.cpp"
 
 
+FILE *dll_agnostic_fopen(char *filename, char *mode) {
+    char path[256];
+    GetCurrentDirectory(_COUNT_OF(path), path);
+    strcat(path, "\\");
+    strcat(path, filename);
+    return fopen(path, mode);
+}
+
+
+IndexedTriangleMesh3D dragonBody; // FORNOW
 
 const real ROBOT_SEGMENT_LENGTH = 0.1450;
 const real ROBOT_SEGMENT_RADIUS = 0.06 / 2;
@@ -150,14 +118,6 @@ delegate UnityGeneralPurposeInt cpp_getNumVertices() { return sim.num_nodes; }
 delegate UnityGeneralPurposeInt cpp_getNumTriangles() { return sim.num_triangles; }
 bool initialized;
 
-
-/// BEGIN CARL ///
-
-#define HEAD 0
-#define BODY 1
-
-IndexedTriangleMesh3D _dragonHead;
-IndexedTriangleMesh3D dragonBody;
 typedef FixedSizeSelfDestructingArray<mat4> Bones;
 const int DRAGON_NUM_BONES = MESH_NUMBER_OF_NODE_LAYERS - 1 + (INCLUDE_PYRAMID_CAP ? 1 : 0);
 vec3 boneOriginsRest[DRAGON_NUM_BONES + 1]; // ? okay FORNOW
@@ -203,156 +163,36 @@ Bones getBones(SDVector &x) {
     return result;
 }
 
-delegate UnityGeneralPurposeInt cpp_dragon_getNumVertices(UnityGeneralPurposeInt mesh_index) {
-    IndexedTriangleMesh3D mesh = mesh_index ? dragonBody : _dragonHead;
-    return mesh.num_vertices;
+vec3 skinnedGet(IndexedTriangleMesh3D *mesh, const Bones &bones, Via via) {
+    vec3 result;
+    mat4 *tmp = mesh->bones; {
+        mesh->bones = bones.data;
+        int3 tri = { via.data[0].index, via.data[1].index, via.data[2].index, };
+        vec3 w = { via.data[0].weight, via.data[1].weight, via.data[2].weight, };
+        result = mesh->_skin(tri, w); 
+    } mesh->bones = tmp;
+    return result;
 }
 
-delegate UnityGeneralPurposeInt cpp_dragon_getNumTriangles(UnityGeneralPurposeInt mesh_index) {
-    IndexedTriangleMesh3D mesh = mesh_index ? dragonBody : _dragonHead;
-    return mesh.num_triangles;
+vec3 skinnedGet(IndexedTriangleMesh3D *mesh, const Bones &bones, int i) {
+    vec3 result;
+    mat4 *tmp = mesh->bones; {
+        mesh->bones = bones.data;
+        result = mesh->_skin(i); 
+    } mesh->bones = tmp;
+    return result;
 }
 
-delegate UnityGeneralPurposeInt cpp_dragon_getNumBones() { return NUM_BONES; }
 
-delegate void cpp_dragon_getMesh (
-        UnityGeneralPurposeInt mesh_index,
-        void *vertex_positions,
-        void *vertex_normals,
-        void *vertex_colors,
-        void *triangle_indices) {
-
-    IndexedTriangleMesh3D mesh = mesh_index ? dragonBody : _dragonHead;
-
-    for (int k = 0; k < cpp_dragon_getNumVertices(mesh_index); k++) {
-        for_(d, 3) {
-            ((UnityVertexAttributeFloat*) vertex_positions)[3 * k + d] = (UnityVertexAttributeFloat)(mesh.vertex_positions[k][d]);
-            ((UnityVertexAttributeFloat*)   vertex_normals)[3 * k + d] = (UnityVertexAttributeFloat)(mesh.vertex_normals  [k][d]);
-        }
-        for_(d, 4) {
-            ((UnityVertexAttributeFloat*) vertex_colors)[4 * k + d] = (d == 3) ? (UnityVertexAttributeFloat)(1.0)
-                : (UnityVertexAttributeFloat)(mesh.vertex_colors[k][d]);
-        }
-    }
-    for (int k = 0; k < cpp_dragon_getNumTriangles(mesh_index); k++) {
-        for_(d, 3) {
-            ((UnityTriangleIndexInt*) triangle_indices)[3 * k + d] = (UnityTriangleIndexInt)(mesh.triangle_indices[k][d]);
-        }
-    }
+#ifdef JIM_DLL
+int _ZZZ(int d) {
+    // unity is left-handed
+    return (d == 2) ? -1 : 1;
 }
+#else
+int _ZZZ(int) { return 1; }
+#endif
 
-int _ZZZ(int d) { return (d == 2) ? -1 : 1; } // unity is left-handed
-
-delegate void cpp_dragon_yzoBones(
-        void *bones_y,
-        void *bones_z,
-        void *bones_o) {
-
-    for(int i = 0; i < NUM_BONES; i++) {
-        for_(d, 3) {
-            ((UnityVertexAttributeFloat*) bones_y)[3 * i + d] = (UnityVertexAttributeFloat)(currentBones[i](d, 1));
-            ((UnityVertexAttributeFloat*) bones_z)[3 * i + d] = (UnityVertexAttributeFloat)(currentBones[i](d, 2));
-            ((UnityVertexAttributeFloat*) bones_o)[3 * i + d] = (UnityVertexAttributeFloat)(currentBones[i](d, 3));
-        }
-    }
-}
-
-delegate void cpp_dragon_initializeBones (
-        void *bones_y,
-        void *bones_z,
-        void *bones_o,
-        void *bone_indices,
-        void *bone_weights) {
-
-    ASSERT(initialized);
-
-    // TODO: this shouldn't be here
-    for(int i = 0; i < NUM_BONES; i++) {
-        for_(d, 3) {
-            ((UnityVertexAttributeFloat*) bones_y)[3 * i + d] = (UnityVertexAttributeFloat)(currentBones[i](d, 1));
-            ((UnityVertexAttributeFloat*) bones_z)[3 * i + d] = (UnityVertexAttributeFloat)(currentBones[i](d, 2));
-            ((UnityVertexAttributeFloat*) bones_o)[3 * i + d] = (UnityVertexAttributeFloat)(currentBones[i](d, 3));
-        }
-    }
-
-    for(int i = 0; i < dragonBody.num_vertices; i++) {
-        for_(j, 4) {
-            ((UnityGeneralPurposeInt*)    bone_indices)[4 * i + j] = (UnityGeneralPurposeInt)(   dragonBody.bone_indices[i][j]);
-            ((UnityVertexAttributeFloat*) bone_weights)[4 * i + j] = (UnityVertexAttributeFloat)(dragonBody.bone_weights[i][j]);
-        }
-    }
-}
-
-delegate void cpp_dragon_yzoHead (
-        void *bones_y,
-        void *bones_z,
-        void *bones_o) {
-
-    vec3 y = -normalized(get(currentState.x, 9 + (NUM_BONES) * 10) - get(currentState.x, 9 + (NUM_BONES - 1) * 10));
-    vec3 up = { 0.0, 1.0, 0.0 }; 
-    vec3 x = normalized(cross(y, up));
-    vec3 z = cross(x, y);
-    vec3 o = get(currentState.x, 9 + (NUM_BONES) * 10);
-
-    float y_floats[3] = {(float)(y.x), (float)(y.y), (float)(y.z)};
-    float z_floats[3] = {(float)(z.x), (float)(z.y), (float)(z.z)};
-    float o_floats[3] = {(float)(o.x), (float)(o.y), (float)(o.z)};
-
-    for_(i, 3) {
-        ((float *) bones_y)[i] = y_floats[i];
-        ((float *) bones_z)[i] = z_floats[i];
-        ((float *) bones_o)[i] = o_floats[i];
-    }
-}
-
-delegate UnityGeneralPurposeInt cpp_getTotalNumVias() { return sim.num_cable_vias_total; }
-
-delegate UnityGeneralPurposeInt cpp_getNumCables() { return sim.num_cables; }
-
-delegate void cpp_getNumViasPerCable(void *cpp_vias) {
-    for (int i = 0; i < sim.num_cables; i++) {
-        ((UnityGeneralPurposeInt *)cpp_vias)[i] = sim.num_vias[i];
-    }
-}
-
-delegate void cpp_getCables(
-        void *cpp_cable_positions,
-        void *cpp_tensions) {
-
-    for (int i = 0; i < sim.num_cable_vias_total; i++) {
-        vec3 v = get(currentState.x, sim.vias[i]);
-        for_(d, 3) {
-            ((float *)cpp_cable_positions)[i * 3 + d] = (float)(_ZZZ(d) * v[d]);
-        }
-    }
-
-    SDVector tensions = sim.computeCableTensions(currentState.x, currentState.u);
-    for (int i = 0; i < sim.num_cables; i++) {
-        ((float *)cpp_tensions)[i] = (float)(tensions[i]);
-    }
-}
-
-/*
-   char* UNITY_FILEPATH;
-
-   delegate void cpp_getUnityFilePath(void* cpp_filePath) {
-   UNITY_FILEPATH = (char*)cpp_filePath;
-   }
- */
-
-// END CARL ///
-
-
-
-// resets the CPP stuff (featurePoints, simultaion state)
-// the caller is responsible for resetting targetPositions and targetEnabled
-delegate void cpp_reset() {
-    memset(featurePoints, 0, sizeof(featurePoints));
-    // featurePoints[0] = { { sim.num_nodes - 1, 1.0 } };
-    currentState.x = sim.x_rest;
-    currentState.u.setZero();
-    currentBones = getBones(currentState.x);
-}
 
 
 
@@ -387,10 +227,7 @@ void csv_solve(SDVector &x) {
     }
 }
 void csv_exit() {
-    char path[256];
-    GetCurrentDirectory(_COUNT_OF(path), path);
-    strcat(path, "\\spine.csv");
-    FILE *file = fopen(path, "w");
+    FILE *file = dll_agnostic_fopen("spine.csv", "w");
     int CSV_NUMBER_OF_RIGID_BODIES = (ROBOT_NUMBER_OF_SEGMENTS + 1) + (INCLUDE_PYRAMID_CAP ? 1 : 0);
     int CSV_NUM_COLUMNS = 1 + 3 * CSV_NUMBER_OF_RIGID_BODIES;
     {
@@ -417,13 +254,17 @@ void csv_exit() {
 
 
 
-
-
-
 bool HACK_RUNNING_ON_UNITY;
-
+// resets the CPP stuff (featurePoints, simultaion state)
+// the caller is responsible for resetting targetPositions and targetEnabled
+delegate void cpp_reset() {
+    memset(featurePoints, 0, sizeof(featurePoints));
+    // featurePoints[0] = { { sim.num_nodes - 1, 1.0 } };
+    currentState.x = sim.x_rest;
+    currentState.u.setZero();
+    currentBones = getBones(currentState.x);
+}
 delegate void cpp_init(bool _DRAGON_DRIVING = false) {
-
     {
         char path[256];
         GetCurrentDirectory(_COUNT_OF(path), path);
@@ -571,80 +412,6 @@ delegate void cpp_init(bool _DRAGON_DRIVING = false) {
 
     sim.getNext(&currentState); // FORNOW: global_U_xx
 
-    if (0) { // set up skinned mesh
-        { //CARL load meshes
-            char headPath[256];
-            char bodyPath[256];
-            ASSERT(0);
-
-            // printf("HeadPath: %s", headPath);
-            // printf("\n");
-
-            _dragonHead = _meshutil_indexed_triangle_mesh_load(headPath, false, true, false);
-            dragonBody = _meshutil_indexed_triangle_mesh_load(bodyPath, false, true, false);
-            mat4 RS = M4_RotationAboutXAxis(PI / 2) * M4_Scaling(0.05);
-            _dragonHead._applyTransform(RS);
-            dragonBody._applyTransform(M4_Translation(0.0, -0.67, 0.0) * RS);
-        }
-
-        { // create bones in mesh
-            dragonBody.num_bones = DRAGON_NUM_BONES;
-            dragonBody.bones = (mat4 *) malloc(DRAGON_NUM_BONES * sizeof(mat4));
-            dragonBody.bone_indices = (int4 *) malloc(dragonBody.num_vertices * sizeof(int4));
-            dragonBody.bone_weights = (vec4 *) malloc(dragonBody.num_vertices * sizeof(vec4));
-        }
-
-        { // set bones rest positions
-            for_(j, _COUNT_OF(boneOriginsRest)) {
-                boneOriginsRest[j] = get(sim.x_rest, 9 + j * 10);
-            }
-        }
-
-        { // assign weights FORNOW hacky nonsense
-            for_(vertex_i, dragonBody.num_vertices) {
-                auto f = [&](int i) {
-                    real c = AVG(boneOriginsRest[i].y, boneOriginsRest[i + 1].y);
-                    real D = ABS(dragonBody.vertex_positions[vertex_i].y - c);
-                    return MAX(0.0, (1.0 / D) - 10.0);
-                };
-
-                real t = INVERSE_LERP(dragonBody.vertex_positions[vertex_i].y, 0.0, -ROBOT_LENGTH);
-                real b = t * dragonBody.num_bones;
-
-                int j = MIN(MAX(int(b + 0.5), 0), dragonBody.num_bones - 1);
-                int i = MAX(0, j - 1);
-                int k = MIN(dragonBody.num_bones - 1, j + 1);
-
-                dragonBody.bone_indices[vertex_i] = { i, j, k };
-                dragonBody.bone_weights[vertex_i] = { f(i), f(j), f(k) };
-                dragonBody.bone_weights[vertex_i] /= sum(dragonBody.bone_weights[vertex_i]);
-
-                jim_sort_against(
-                        (int *) &dragonBody.bone_indices[vertex_i],
-                        4,
-                        sizeof(int),
-                        (real *) &dragonBody.bone_weights[vertex_i],
-                        true);
-                dragonBody.bone_indices[vertex_i] = { 
-                    dragonBody.bone_indices[vertex_i][3],
-                    dragonBody.bone_indices[vertex_i][2],
-                    dragonBody.bone_indices[vertex_i][1],
-                    dragonBody.bone_indices[vertex_i][0],
-                };
-                dragonBody.bone_weights[vertex_i] = {
-                    dragonBody.bone_weights[vertex_i][3],
-                    dragonBody.bone_weights[vertex_i][2],
-                    dragonBody.bone_weights[vertex_i][1],
-                    dragonBody.bone_weights[vertex_i][0],
-                };
-
-                ASSERT(dragonBody.bone_weights[vertex_i][0] >= dragonBody.bone_weights[vertex_i][1]);
-                ASSERT(dragonBody.bone_weights[vertex_i][1] >= dragonBody.bone_weights[vertex_i][2]);
-                ASSERT(dragonBody.bone_weights[vertex_i][2] >= dragonBody.bone_weights[vertex_i][3]);
-            }
-        }
-    }
-
 
     cpp_reset();
 }
@@ -653,7 +420,6 @@ delegate void cpp_exit() {
     dxl_exit();
     csv_exit();
 }
-
 
 // returns whether the ray hit the mesh
 // if the ray hit the mesh, functions writes to intersection_position__FLOAT_ARRAY__LENGTH_3
@@ -695,26 +461,6 @@ delegate bool cpp_castRay(
     }
 
     return result.hit;
-}
-
-vec3 skinnedGet(IndexedTriangleMesh3D *mesh, const Bones &bones, Via via) {
-    vec3 result;
-    mat4 *tmp = mesh->bones; {
-        mesh->bones = bones.data;
-        int3 tri = { via.data[0].index, via.data[1].index, via.data[2].index, };
-        vec3 w = { via.data[0].weight, via.data[1].weight, via.data[2].weight, };
-        result = mesh->_skin(tri, w); 
-    } mesh->bones = tmp;
-    return result;
-}
-
-vec3 skinnedGet(IndexedTriangleMesh3D *mesh, const Bones &bones, int i) {
-    vec3 result;
-    mat4 *tmp = mesh->bones; {
-        mesh->bones = bones.data;
-        result = mesh->_skin(i); 
-    } mesh->bones = tmp;
-    return result;
 }
 
 
@@ -950,18 +696,17 @@ delegate void cpp_send2motors() {
 }
 
 
+
+
 vec3 SPOOF_targetPositions[MAX_NUM_FEATURE_POINTS];
 int  SPOOF_targetEnabled[MAX_NUM_FEATURE_POINTS];
-
 void SPOOF_reset() {
     memset(SPOOF_targetPositions, 0, sizeof(SPOOF_targetPositions));
     memset(SPOOF_targetEnabled, 0, sizeof(SPOOF_targetEnabled));
     // SPOOF_targetPositions[0] = get(sim.x_rest, featurePoints[0]) + .3 * V3(0, 1, 1);
     // SPOOF_targetEnabled[0] = TRUE;
 }
-
-
-
+bool KAA_AUTOMATED_SPEED_TEST__QUITS_AFTER_A_COUPLE_SECONDS = false; // TODO: this crashes if true?
 void kaa() {
     cpp_init(false);
     SPOOF_reset();
@@ -971,7 +716,7 @@ void kaa() {
     UnityTriangleIndexInt     *SPOOF_triangle_indices = (UnityTriangleIndexInt *) calloc(3 * sim.num_triangles, sizeof(UnityTriangleIndexInt));
     UnityVertexAttributeFloat *SPOOF_feature_point_positions = (UnityVertexAttributeFloat *) calloc(3 * MAX_NUM_FEATURE_POINTS, sizeof(UnityVertexAttributeFloat));
 
-    COW1._gui_hide_and_disable = AUTOMATED_SPEED_TEST__QUITS_AFTER_A_COUPLE_SECONDS;
+    COW1._gui_hide_and_disable = KAA_AUTOMATED_SPEED_TEST__QUITS_AFTER_A_COUPLE_SECONDS;
     Camera3D camera = { 1.7 * ROBOT_LENGTH, RAD(60), 0.0, 0.0, 0.0, -0.5 * ROBOT_LENGTH };
     while (cow_begin_frame()) {
         camera_move(&camera);
@@ -1062,20 +807,6 @@ void kaa() {
                         eso_end();
                     }
                 }
-            } else { // skinning
-                dragonBody.bones = currentBones.data;
-                dragonBody.draw(P, V, globals.Identity);
-
-                { // _dragonHead
-                    // FORNOW: hacky, with few dependencies
-                    vec3 y = -normalized(get(currentState.x, 9 + (NUM_BONES) * 10) - get(currentState.x, 9 + (NUM_BONES - 1) * 10));
-                    vec3 up = { 0.0, 1.0, 0.0 };
-                    vec3 x = cross(y, up);
-                    x = IS_ZERO(squaredNorm(x)) ? V3(1.0, 0.0, 0.0) : normalized(x);
-                    vec3 z = cross(x, y);
-                    vec3 o = get(currentState.x, 9 + (NUM_BONES) * 10);
-                    _dragonHead.draw(P, V, M4_xyzo(x, y, z, o));
-                }
             }
 
 
@@ -1150,7 +881,7 @@ void kaa() {
 
 
         { // FORNOW automated testing
-            if (AUTOMATED_SPEED_TEST__QUITS_AFTER_A_COUPLE_SECONDS) {
+            if (KAA_AUTOMATED_SPEED_TEST__QUITS_AFTER_A_COUPLE_SECONDS) {
                 static real testTime = 0.0;
                 SPOOF_targetPositions[0] += V3(0.003);
                 if (testTime > 2.0) {
@@ -1166,7 +897,33 @@ void kaa() {
 #undef LEN_U
 #undef LEN_X
 
+
 ////////////////////////////////////////////////////////////////////////////////
+delegate UnityGeneralPurposeInt cpp_getTotalNumVias() { return sim.num_cable_vias_total; }
+delegate UnityGeneralPurposeInt cpp_getNumCables() { return sim.num_cables; }
+delegate void cpp_getNumViasPerCable(void *cpp_vias) {
+    for (int i = 0; i < sim.num_cables; i++) {
+        ((UnityGeneralPurposeInt *)cpp_vias)[i] = sim.num_vias[i];
+    }
+}
+delegate void cpp_getCables(
+        void *cpp_cable_positions,
+        void *cpp_tensions) {
+
+    for (int i = 0; i < sim.num_cable_vias_total; i++) {
+        vec3 v = get(currentState.x, sim.vias[i]);
+        for_(d, 3) {
+            ((float *)cpp_cable_positions)[i * 3 + d] = (float)(_ZZZ(d) * v[d]);
+        }
+    }
+
+    SDVector tensions = sim.computeCableTensions(currentState.x, currentState.u);
+    for (int i = 0; i < sim.num_cables; i++) {
+        ((float *)cpp_tensions)[i] = (float)(tensions[i]);
+    }
+}
+////////////////////////////////////////////////////////////////////////////////
+
 
 void main() {
     omp_set_num_threads(6);
@@ -1176,6 +933,86 @@ void main() {
         // APP(eg_fbo);
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1463,4 +1300,239 @@ void jones() {
 }
 
 //END CARL
+
+delegate void cpp_dragon_yzoHead (
+        void *bones_y,
+        void *bones_z,
+        void *bones_o) {
+
+    vec3 y = -normalized(get(currentState.x, 9 + (NUM_BONES) * 10) - get(currentState.x, 9 + (NUM_BONES - 1) * 10));
+    vec3 up = { 0.0, 1.0, 0.0 }; 
+    vec3 x = normalized(cross(y, up));
+    vec3 z = cross(x, y);
+    vec3 o = get(currentState.x, 9 + (NUM_BONES) * 10);
+
+    float y_floats[3] = {(float)(y.x), (float)(y.y), (float)(y.z)};
+    float z_floats[3] = {(float)(z.x), (float)(z.y), (float)(z.z)};
+    float o_floats[3] = {(float)(o.x), (float)(o.y), (float)(o.z)};
+
+    for_(i, 3) {
+        ((float *) bones_y)[i] = y_floats[i];
+        ((float *) bones_z)[i] = z_floats[i];
+        ((float *) bones_o)[i] = o_floats[i];
+    }
+}
+
+
+delegate UnityGeneralPurposeInt cpp_dragon_getNumVertices(UnityGeneralPurposeInt mesh_index) {
+    IndexedTriangleMesh3D mesh = mesh_index ? dragonBody : _dragonHead;
+    return mesh.num_vertices;
+}
+
+delegate UnityGeneralPurposeInt cpp_dragon_getNumTriangles(UnityGeneralPurposeInt mesh_index) {
+    IndexedTriangleMesh3D mesh = mesh_index ? dragonBody : _dragonHead;
+    return mesh.num_triangles;
+}
+
+delegate UnityGeneralPurposeInt cpp_dragon_getNumBones() { return NUM_BONES; }
+
+delegate void cpp_dragon_getMesh (
+        UnityGeneralPurposeInt mesh_index,
+        void *vertex_positions,
+        void *vertex_normals,
+        void *vertex_colors,
+        void *triangle_indices) {
+
+    IndexedTriangleMesh3D mesh = mesh_index ? dragonBody : _dragonHead;
+
+    for (int k = 0; k < cpp_dragon_getNumVertices(mesh_index); k++) {
+        for_(d, 3) {
+            ((UnityVertexAttributeFloat*) vertex_positions)[3 * k + d] = (UnityVertexAttributeFloat)(mesh.vertex_positions[k][d]);
+            ((UnityVertexAttributeFloat*)   vertex_normals)[3 * k + d] = (UnityVertexAttributeFloat)(mesh.vertex_normals  [k][d]);
+        }
+        for_(d, 4) {
+            ((UnityVertexAttributeFloat*) vertex_colors)[4 * k + d] = (d == 3) ? (UnityVertexAttributeFloat)(1.0)
+                : (UnityVertexAttributeFloat)(mesh.vertex_colors[k][d]);
+        }
+    }
+    for (int k = 0; k < cpp_dragon_getNumTriangles(mesh_index); k++) {
+        for_(d, 3) {
+            ((UnityTriangleIndexInt*) triangle_indices)[3 * k + d] = (UnityTriangleIndexInt)(mesh.triangle_indices[k][d]);
+        }
+    }
+}
+// TODO: GPU picking
+// TODO: make line and spheres show up through the transparent mesh as well
+// TODO: see if you can run cow while running an app in VR
+// TODO: floor
+// TODO: revisit the hessian (kim-style SparseMatrix parallel add?)
+// TODO: talking to motors
+// TODO: linear blend skinning in a vertex shader
+//       get space fish back up and running
+// TODO: #define in build.bat for gui stuff
+// TODO: split IK line search between frames
+// TODO: dFdu sparse matrix (why did this fail last time?)
+// TODO: should x be a FixedSizeSelfDestructingArray<vec3>?
+// // (waiting on josie) real-world trajectory Figure
+// play more with sim params
+// play more with ik weights
+// // visualization
+// pipe and sphere widget
+// cable slack visualization
+// // fun
+// ordering juggling clubs
+// // cow
+// port MIN, MAX, etc. to be functions
+
+
+
+
+
+
+
+
+// bones
+
+
+// C++
+// - IK
+
+// C#
+// - controllers
+// - draw
+// -- (GPU)
+// --- "skinning" - vertex shader
+
+
+IndexedTriangleMesh3D _dragonHead;
+IndexedTriangleMesh3D dragonBody;
+delegate void cpp_dragon_initializeBones (
+        void *bones_y,
+        void *bones_z,
+        void *bones_o,
+        void *bone_indices,
+        void *bone_weights) {
+
+    ASSERT(initialized);
+
+    // TODO: this shouldn't be here
+    for(int i = 0; i < NUM_BONES; i++) {
+        for_(d, 3) {
+            ((UnityVertexAttributeFloat*) bones_y)[3 * i + d] = (UnityVertexAttributeFloat)(currentBones[i](d, 1));
+            ((UnityVertexAttributeFloat*) bones_z)[3 * i + d] = (UnityVertexAttributeFloat)(currentBones[i](d, 2));
+            ((UnityVertexAttributeFloat*) bones_o)[3 * i + d] = (UnityVertexAttributeFloat)(currentBones[i](d, 3));
+        }
+    }
+
+    for(int i = 0; i < dragonBody.num_vertices; i++) {
+        for_(j, 4) {
+            ((UnityGeneralPurposeInt*)    bone_indices)[4 * i + j] = (UnityGeneralPurposeInt)(   dragonBody.bone_indices[i][j]);
+            ((UnityVertexAttributeFloat*) bone_weights)[4 * i + j] = (UnityVertexAttributeFloat)(dragonBody.bone_weights[i][j]);
+        }
+    }
+}
+
+    if (0) { // set up skinned mesh
+        { //CARL load meshes
+            char headPath[256];
+            char bodyPath[256];
+            ASSERT(0);
+
+            // printf("HeadPath: %s", headPath);
+            // printf("\n");
+
+            _dragonHead = _meshutil_indexed_triangle_mesh_load(headPath, false, true, false);
+            dragonBody = _meshutil_indexed_triangle_mesh_load(bodyPath, false, true, false);
+            mat4 RS = M4_RotationAboutXAxis(PI / 2) * M4_Scaling(0.05);
+            _dragonHead._applyTransform(RS);
+            dragonBody._applyTransform(M4_Translation(0.0, -0.67, 0.0) * RS);
+        }
+
+        { // create bones in mesh
+            dragonBody.num_bones = DRAGON_NUM_BONES;
+            dragonBody.bones = (mat4 *) malloc(DRAGON_NUM_BONES * sizeof(mat4));
+            dragonBody.bone_indices = (int4 *) malloc(dragonBody.num_vertices * sizeof(int4));
+            dragonBody.bone_weights = (vec4 *) malloc(dragonBody.num_vertices * sizeof(vec4));
+        }
+
+        { // set bones rest positions
+            for_(j, _COUNT_OF(boneOriginsRest)) {
+                boneOriginsRest[j] = get(sim.x_rest, 9 + j * 10);
+            }
+        }
+
+        { // assign weights FORNOW hacky nonsense
+            for_(vertex_i, dragonBody.num_vertices) {
+                auto f = [&](int i) {
+                    real c = AVG(boneOriginsRest[i].y, boneOriginsRest[i + 1].y);
+                    real D = ABS(dragonBody.vertex_positions[vertex_i].y - c);
+                    return MAX(0.0, (1.0 / D) - 10.0);
+                };
+
+                real t = INVERSE_LERP(dragonBody.vertex_positions[vertex_i].y, 0.0, -ROBOT_LENGTH);
+                real b = t * dragonBody.num_bones;
+
+                int j = MIN(MAX(int(b + 0.5), 0), dragonBody.num_bones - 1);
+                int i = MAX(0, j - 1);
+                int k = MIN(dragonBody.num_bones - 1, j + 1);
+
+                dragonBody.bone_indices[vertex_i] = { i, j, k };
+                dragonBody.bone_weights[vertex_i] = { f(i), f(j), f(k) };
+                dragonBody.bone_weights[vertex_i] /= sum(dragonBody.bone_weights[vertex_i]);
+
+                jim_sort_against(
+                        (int *) &dragonBody.bone_indices[vertex_i],
+                        4,
+                        sizeof(int),
+                        (real *) &dragonBody.bone_weights[vertex_i],
+                        true);
+                dragonBody.bone_indices[vertex_i] = { 
+                    dragonBody.bone_indices[vertex_i][3],
+                    dragonBody.bone_indices[vertex_i][2],
+                    dragonBody.bone_indices[vertex_i][1],
+                    dragonBody.bone_indices[vertex_i][0],
+                };
+                dragonBody.bone_weights[vertex_i] = {
+                    dragonBody.bone_weights[vertex_i][3],
+                    dragonBody.bone_weights[vertex_i][2],
+                    dragonBody.bone_weights[vertex_i][1],
+                    dragonBody.bone_weights[vertex_i][0],
+                };
+
+                ASSERT(dragonBody.bone_weights[vertex_i][0] >= dragonBody.bone_weights[vertex_i][1]);
+                ASSERT(dragonBody.bone_weights[vertex_i][1] >= dragonBody.bone_weights[vertex_i][2]);
+                ASSERT(dragonBody.bone_weights[vertex_i][2] >= dragonBody.bone_weights[vertex_i][3]);
+            }
+        }
+    }
+
+            else { // skinning
+                dragonBody.bones = currentBones.data;
+                dragonBody.draw(P, V, globals.Identity);
+
+                { // _dragonHead
+                    // FORNOW: hacky, with few dependencies
+                    vec3 y = -normalized(get(currentState.x, 9 + (NUM_BONES) * 10) - get(currentState.x, 9 + (NUM_BONES - 1) * 10));
+                    vec3 up = { 0.0, 1.0, 0.0 };
+                    vec3 x = cross(y, up);
+                    x = IS_ZERO(squaredNorm(x)) ? V3(1.0, 0.0, 0.0) : normalized(x);
+                    vec3 z = cross(x, y);
+                    vec3 o = get(currentState.x, 9 + (NUM_BONES) * 10);
+                    _dragonHead.draw(P, V, M4_xyzo(x, y, z, o));
+                }
+            }
+
+delegate void cpp_dragon_yzoBones(
+        void *bones_y,
+        void *bones_z,
+        void *bones_o) {
+
+    for(int i = 0; i < NUM_BONES; i++) {
+        for_(d, 3) {
+            ((UnityVertexAttributeFloat*) bones_y)[3 * i + d] = (UnityVertexAttributeFloat)(currentBones[i](d, 1));
+            ((UnityVertexAttributeFloat*) bones_z)[3 * i + d] = (UnityVertexAttributeFloat)(currentBones[i](d, 2));
+            ((UnityVertexAttributeFloat*) bones_o)[3 * i + d] = (UnityVertexAttributeFloat)(currentBones[i](d, 3));
+        }
+    }
+}
 #endif

@@ -256,21 +256,24 @@ void csv_exit() {
 
 
 #define BALLOON_MAXIMUM_NUMBER_OF_BALLOONS 16
-int balloon_num_balloons;
+int balloon_number_of_balloons;
 vec3 balloon_positions[BALLOON_MAXIMUM_NUMBER_OF_BALLOONS];
 real balloon_radius = 0.1;
 void balloon_init() {
     FILE *file = dll_agnostic_fopen("balloon_config.txt", "r");
     char buffer[4096];
     while (fgets(buffer, _COUNT_OF(buffer), file) != NULL) {
-        ASSERT(balloon_num_balloons < BALLOON_MAXIMUM_NUMBER_OF_BALLOONS);
-        sscanf(buffer, "%lf %lf %lf", &balloon_positions[balloon_num_balloons].x, &balloon_positions[balloon_num_balloons].y, &balloon_positions[balloon_num_balloons].z);
-        ++balloon_num_balloons;
+        ASSERT(balloon_number_of_balloons < BALLOON_MAXIMUM_NUMBER_OF_BALLOONS);
+        sscanf(buffer, "%lf %lf %lf", &balloon_positions[balloon_number_of_balloons].x, &balloon_positions[balloon_number_of_balloons].y, &balloon_positions[balloon_number_of_balloons].z);
+        ++balloon_number_of_balloons;
     }
     fclose(file);
 }
-delegate void cpp_balloon_positions(void *balloons) {
-    for_(i, balloon_num_balloons) {
+delegate int cpp_get_number_of_balloons() {
+    return balloon_number_of_balloons;
+}
+delegate void cpp_get_balloon_positions(void *balloons) {
+    for_(i, balloon_number_of_balloons) {
         for_(d, 3) {
             ((UnityVertexAttributeFloat*) balloons)[3 * i + d] = (UnityVertexAttributeFloat)(balloon_positions[i][d]);
         }
@@ -913,14 +916,14 @@ void kaa() {
 
 
         { // balloons
-            if (KAA_numPopped < balloon_num_balloons) {
+            if (KAA_numPopped < balloon_number_of_balloons) {
                 vec3 tipPosition = get(currentState.x, sim.num_nodes - 1);
                 vec3 currentBalloonPosition = balloon_positions[KAA_numPopped];
                 if (norm(tipPosition - currentBalloonPosition) < balloon_radius) {
                     ++KAA_numPopped;
                 }
             }
-            for_(i, balloon_num_balloons) {
+            for_(i, balloon_number_of_balloons) {
                 if ( i < KAA_numPopped) continue;
                 vec3 color = (i == KAA_numPopped) ? monokai.green : monokai.gray;
                 draw_sphere(balloon_positions[i], balloon_radius, color);

@@ -1,6 +1,6 @@
 // NOTE: I don't use any scriptful objects (besides whatever object has this God script)
 //       => Deactivating a (scriptless) game object is the same as telling it to not draw itself--it's data is still accessible :)
-//          Do this with the GAME_OBJECT_DRAW(...) function
+//          Do this with the GAME_OBJECT_SET_WHETHER_DRAWING(...) function
 
 // TODO: Roll your own grab interactable functionality
 
@@ -28,7 +28,7 @@ using UnityEngine.Rendering;
 unsafe public class Main : MonoBehaviour {
 
 
-    bool AUTO_TEST_DO_TEST = false;
+    bool AUTO_TEST_DO_TEST;
     bool AUTO_TEST_SINUSOIDAL_TEST = true;
     int _JIM_AUTOMATED_TEST_PHASE__NOTE_NOT_USED_BY_SINUOSOIDAL_TEST;
     float jimAutomatedTestTime = 0.0f;
@@ -84,7 +84,7 @@ unsafe public class Main : MonoBehaviour {
         UNITY_ASSERT(result != null);
         return result;
     }
-    void GAME_OBJECT_DRAW(GameObject gameObject, bool draw) {
+    void GAME_OBJECT_SET_WHETHER_DRAWING(GameObject gameObject, bool draw) {
         gameObject.SetActive(draw);
     }
     bool GAME_OBJECT_IS_DRAWING(GameObject gameObject) {
@@ -215,7 +215,7 @@ unsafe public class Main : MonoBehaviour {
             inputLeftRayDirection  =  leftHand.transform.rotation * Vector3.forward;
             inputRightRayDirection = rightHand.transform.rotation * Vector3.forward;
             {
-                inputLeftRayOrigin = new Vector3(); // FORNOW
+                inputLeftRayOrigin = new Vector3();
                 bool found = false;
                 foreach (Transform child in leftHand.transform) {
                     if (child.name == "[Ray Interactor] Ray Origin") {
@@ -227,7 +227,7 @@ unsafe public class Main : MonoBehaviour {
                 UNITY_ASSERT(found);
             }
             {
-                inputRightRayOrigin = new Vector3(); // FORNOW
+                inputRightRayOrigin = new Vector3();
                 bool found = false;
                 foreach (Transform child in rightHand.transform) {
                     if (child.name == "[Ray Interactor] Ray Origin") {
@@ -321,7 +321,7 @@ unsafe public class Main : MonoBehaviour {
         widgetWidgetGameObjects = new GameObject[widgetMaximumNumberOfActiveWidgets];
         for (int i = 0; i < widgetMaximumNumberOfActiveWidgets; ++i) {
             widgetWidgetGameObjects[i] = GAME_OBJECT_CREATE("widget " + i, widgetWidgetsParentObject);
-            GAME_OBJECT_DRAW(widgetWidgetGameObjects[i], false);
+            GAME_OBJECT_SET_WHETHER_DRAWING(widgetWidgetGameObjects[i], false);
         }
         widgetTargetGameObjects = new GameObject[widgetMaximumNumberOfActiveWidgets];
         widgetTargetRigidbodies = new Rigidbody[widgetMaximumNumberOfActiveWidgets];
@@ -359,7 +359,7 @@ unsafe public class Main : MonoBehaviour {
     void WidgetActivate(Vector3 position) {
         UNITY_ASSERT(widgetNumberOfActiveWidgets < widgetMaximumNumberOfActiveWidgets);
         int widgetIndex = widgetNextIndexToActivateInto();
-        GAME_OBJECT_DRAW(widgetWidgetGameObjects[widgetIndex], true);
+        GAME_OBJECT_SET_WHETHER_DRAWING(widgetWidgetGameObjects[widgetIndex], true);
         GAME_OBJECT_SET_POSITION(widgetTargetGameObjects[widgetIndex], position);
         GAME_OBJECT_SET_POSITION(widgetFeaturePointGameObjects[widgetIndex], position);
         ++widgetNumberOfActiveWidgets;
@@ -367,7 +367,7 @@ unsafe public class Main : MonoBehaviour {
     void WidgetDeactivate(int i) {
         UNITY_ASSERT((0 <= i) && (i < widgetMaximumNumberOfActiveWidgets));
         UNITY_ASSERT(GAME_OBJECT_IS_DRAWING(widgetWidgetGameObjects[i]));
-        GAME_OBJECT_DRAW(widgetWidgetGameObjects[i], false);
+        GAME_OBJECT_SET_WHETHER_DRAWING(widgetWidgetGameObjects[i], false);
         --widgetNumberOfActiveWidgets;
     }
     void WidgetUpdate() {
@@ -458,6 +458,10 @@ unsafe public class Main : MonoBehaviour {
             bool pleaseSetFeaturePoint,
             int indexOfFeaturePointToSet,
             void *feature_point_positions__FLOAT3__ARRAY = null);
+    delegate int cpp_getNumberOfBalloons();
+    delegate void cpp_getBalloonPositions(void *balloons__FLOAT3_ARRAY);
+    delegate int cpp_AUTO_TEST();
+
 
     cpp_send2motors        send2motors;
     cpp_exit               exit;
@@ -470,8 +474,11 @@ unsafe public class Main : MonoBehaviour {
     cpp_getNumCables       getNumCables;
     cpp_getNumViasPerCable getNumViasPerCable;
     cpp_getCables          getCables;
+    cpp_getNumberOfBalloons getNumberOfBalloons;
+    cpp_getBalloonPositions getBalloonPositions;
+    cpp_AUTO_TEST AUTO_TEST;
 
-    void LoadDLL() {
+    void DLLAwake() {
         library = LoadLibrary("snake");
         UNITY_ASSERT(library != null);
         send2motors        = (cpp_send2motors)        Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_send2motors"),        typeof(cpp_send2motors));
@@ -485,10 +492,22 @@ unsafe public class Main : MonoBehaviour {
         getNumCables       = (cpp_getNumCables)       Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_getNumCables"),       typeof(cpp_getNumCables));    
         getNumViasPerCable = (cpp_getNumViasPerCable) Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_getNumViasPerCable"), typeof(cpp_getNumViasPerCable));
         getCables          = (cpp_getCables)          Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_getCables"),          typeof(cpp_getCables));
+        getNumberOfBalloons          = (cpp_getNumberOfBalloons)          Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_getNumberOfBalloons"),          typeof(cpp_getNumberOfBalloons));
+        getBalloonPositions          = (cpp_getBalloonPositions)          Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_getBalloonPositions"),          typeof(cpp_getBalloonPositions));
+       AUTO_TEST          = (cpp_AUTO_TEST)          Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_AUTO_TEST"),          typeof(cpp_AUTO_TEST));
     }
 
 
 
+    int balloonNumberOfBalloons;
+    Vector3[] balloonPositions;
+    GameObject[] balloonGameObjects;
+    int balloonNumberPopped;
+    Vector3 balloonRobotTipPosition__SET_IN_SolveWrapper;
+    float balloonRadius = 0.1f;
+    void balloonSetColor(int i, bool nextBalloonToPop) {
+        balloonGameObjects[i].transform.GetComponent<MeshRenderer>().material.color = (nextBalloonToPop) ? Color.green : Color.gray -  new Color(0.0f, 0.0f, 0.0f, 0.3f) ;
+    }
 
     public GameObject leftHand;
     public GameObject rightHand;
@@ -508,7 +527,7 @@ unsafe public class Main : MonoBehaviour {
     GameObject cameraOffset;
     void Awake () {
         Application.targetFrameRate = 60;
-        LoadDLL();
+        DLLAwake();
 
         cameraOffset = GameObject.Find("CameraOffset");
 
@@ -536,13 +555,40 @@ unsafe public class Main : MonoBehaviour {
             cables = CablesInit();
         }
 
+        { // BalloonAwake
+            balloonNumberOfBalloons = getNumberOfBalloons();
+
+            balloonPositions = new Vector3[balloonNumberOfBalloons];
+            {
+                NativeArray<float3> _balloonPositions = new NativeArray<float3>(balloonNumberOfBalloons, Allocator.Persistent);
+                getBalloonPositions(NativeArrayUnsafeUtility.GetUnsafePtr<float3>(_balloonPositions));
+                for (int i = 0; i < balloonNumberOfBalloons; ++i) {
+                    balloonPositions[i] = _balloonPositions[i];
+                }
+                _balloonPositions.Dispose();
+            }
+
+            balloonGameObjects = new GameObject[balloonNumberOfBalloons];
+            GameObject balloonParentObject = GAME_OBJECT_CREATE("balloonParentObject");
+            GameObject prefabBalloon = PREFAB_LOAD("prefabBalloon");
+            for (int i = 0; i < balloonNumberOfBalloons; ++i) {
+                balloonGameObjects[i] = PREFAB_INSTANTIATE(prefabBalloon, "balloon " + i, balloonParentObject);
+                balloonGameObjects[i].transform.position = balloonPositions[i];
+            }
+
+            for (int i = 0; i < balloonNumberOfBalloons; ++i) {
+                balloonSetColor(i, (i == 0));
+            }
+        }
+
         // dragonMeshManager = new DragonMeshManager(dragon_head, dragon_body);
         // dragonMeshManager.SetUpAll();
 
         SolveWrapper(); 
 
+        AUTO_TEST_DO_TEST = (AUTO_TEST() == 1);
         if (AUTO_TEST_DO_TEST) {
-            CastRayWrapper(new Vector3(0.0f, -0.6f, -1.0f), new Vector3(0.0f, 0.0f, 1.0f), true);
+            CastRayWrapper(new Vector3(0.0f, -1.0f, 0.0f), new Vector3(0.0f, 1.0f, 0.0f), true);
             if (!AUTO_TEST_SINUSOIDAL_TEST) {
                 widgetTargetGameObjects[0].transform.position = new Vector3(
                         0.5f,
@@ -560,12 +606,12 @@ unsafe public class Main : MonoBehaviour {
         }
 
         if (AUTO_TEST_DO_TEST) {
-            jimAutomatedTestTime += 0.01f;
+            jimAutomatedTestTime += 0.004f;
             if (AUTO_TEST_SINUSOIDAL_TEST) {
                 widgetTargetGameObjects[0].transform.position = new Vector3(
-                        Mathf.Min(1.0f, jimAutomatedTestTime) * 0.3f * Mathf.Cos(jimAutomatedTestTime),
-                        -0.4f,
-                        Mathf.Min(1.0f, jimAutomatedTestTime) * 0.3f * Mathf.Sin(jimAutomatedTestTime)
+                        Mathf.Min(1.0f, jimAutomatedTestTime) * 0.4f * Mathf.Cos(jimAutomatedTestTime),
+                        -0.6f,
+                        Mathf.Min(1.0f, jimAutomatedTestTime) * 0.4f * Mathf.Sin(jimAutomatedTestTime)
                         );
             } else {
                 // if (jimAutomatedTestTime > 0.66f && _JIM_AUTOMATED_TEST_PHASE__NOTE_NOT_USED_BY_SINUOSOIDAL_TEST == 0) {
@@ -591,9 +637,11 @@ unsafe public class Main : MonoBehaviour {
         InputUpdate();
         SpecialInputUpdate();
 
-        if (inputPressedX) { solving = !solving; }
-        if (inputHeldB) { cameraOffset.transform.position = new Vector3(cameraOffset.transform.position.x, cameraOffset.transform.position.y + .01f, cameraOffset.transform.position.z); }
-        if (inputHeldA) { cameraOffset.transform.position = new Vector3(cameraOffset.transform.position.x, cameraOffset.transform.position.y - .01f, cameraOffset.transform.position.z); }
+        { // tweak UI
+            if (inputPressedX) { solving = !solving; }
+            if (inputHeldB) { cameraOffset.transform.position = new Vector3(cameraOffset.transform.position.x, cameraOffset.transform.position.y + .01f, cameraOffset.transform.position.z); }
+            if (inputHeldA) { cameraOffset.transform.position = new Vector3(cameraOffset.transform.position.x, cameraOffset.transform.position.y - .01f, cameraOffset.transform.position.z); }
+        }
 
         { // interactionDotLeft, interactionDotRight
             {
@@ -630,6 +678,7 @@ unsafe public class Main : MonoBehaviour {
             }
         }
 
+
         { // FORNOW: Aggressive clamping
             for (int i = 0; i < widgetMaximumNumberOfActiveWidgets; ++i) {
                 widgetTargetRigidbodies[i].velocity = new Vector3(0.0f, 0.0f, 0.0f);
@@ -640,6 +689,7 @@ unsafe public class Main : MonoBehaviour {
                         );
             }
         }
+
 
         if (solving) {
             SolveWrapper();
@@ -652,7 +702,17 @@ unsafe public class Main : MonoBehaviour {
         UpdateCables();
         WidgetUpdate();
 
-        // dragonMeshManager.UpdateAll();
+        { // BalloonUpdate
+            if (balloonNumberPopped < balloonNumberOfBalloons) {
+                if (Vector3.Distance(balloonRobotTipPosition__SET_IN_SolveWrapper, balloonPositions[balloonNumberPopped]) < balloonRadius) {
+                    GAME_OBJECT_SET_WHETHER_DRAWING(balloonGameObjects[balloonNumberPopped++], false);
+                }
+                if (balloonNumberPopped < balloonNumberOfBalloons) {
+                    balloonSetColor(balloonNumberPopped, true);
+                }
+            }
+        }
+
     }
 
     void SolveWrapper() {
@@ -661,12 +721,12 @@ unsafe public class Main : MonoBehaviour {
 
         Mesh.MeshDataArray meshDataArray = Mesh.AllocateWritableMeshData(1);
         Mesh.MeshData meshData = meshDataArray[0];
-        { // TODO: link to whatever tutorial/docs we got this stuff from
+        {
             int vertexCount = getNumVertices();
             int vertexAttributeCount = 2;
 
             var vertexAttributes = new NativeArray<VertexAttributeDescriptor>(vertexAttributeCount, Allocator.Temp);
-            vertexAttributes[0] = new VertexAttributeDescriptor(dimension: 3); // position?
+            vertexAttributes[0] = new VertexAttributeDescriptor(dimension: 3); // position
             vertexAttributes[1] = new VertexAttributeDescriptor(VertexAttribute.Normal, dimension: 3, stream: 1);
             meshData.SetVertexBufferParams(vertexCount, vertexAttributes);
             vertexAttributes.Dispose();
@@ -700,10 +760,12 @@ unsafe public class Main : MonoBehaviour {
         }
 
 
+        balloonRobotTipPosition__SET_IN_SolveWrapper = meshData.GetVertexData<float3>(0)[getNumVertices() - 1];
+
+
         // FORNOW: TODO: try moving this before scope if we ever start passing triangle indices only once (e.g., in Awake)
         meshData.subMeshCount = 1;
         meshData.SetSubMesh(0, new SubMeshDescriptor(0, triangleIndexCount));
-
         Mesh mesh = new Mesh {
             name = "Procedural Mesh"
         };
@@ -886,7 +948,7 @@ unsafe public class Main : MonoBehaviour {
    cpp_dragon_initializeBones dragon_initializeBones;
    cpp_dragon_yzoHead dragon_yzoHead;
 
-   void LoadDLL() {
+   void DLLAwake() {
    library = LoadLibrary("Assets/snake");
    dragon_getNumVertices = (cpp_dragon_getNumVertices) Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_dragon_getNumVertices"), typeof(cpp_dragon_getNumVertices));
    dragon_getNumTriangles = (cpp_dragon_getNumTriangles) Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_dragon_getNumTriangles"), typeof(cpp_dragon_getNumTriangles));
@@ -912,7 +974,7 @@ unsafe public class Main : MonoBehaviour {
 public DragonMeshManager(GameObject h, GameObject b) {
     head = h;
     body = b;
-    LoadDLL();
+    DLLAwake();
 }
 ~DragonMeshManager() {
     FreeLibrary(library);

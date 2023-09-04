@@ -61,7 +61,7 @@ IntersectionResult ray_mesh_intersection(vec3 ray_origin, vec3 ray_direction, co
 #include "fbo.cpp"
 
 
-FILE *dll_agnostic_fopen(char *filename, char *mode) {
+FILE *dll_asserted_agnostic_fopen(char *filename, char *mode) {
     char path[256];
     GetCurrentDirectory(_COUNT_OF(path), path);
     strcat(path, "\\");
@@ -203,7 +203,8 @@ bool _csv_initialized;
 long _csv_start_time;
 real _csv_buffer[_CSV_MAX_REALS];
 int _csv_index;
-void csv_solve(SDVector &x) {
+void csv_solve(State state) {
+    SDVector &x = state.x;
     if (!_csv_initialized) {
         _csv_initialized = true;
         _csv_start_time = util_timestamp_in_milliseconds();
@@ -227,17 +228,25 @@ void csv_solve(SDVector &x) {
         if (!isMarkerRigidBodyLayer) continue;
         for_(d, 3) if (_csv_index < _CSV_MAX_REALS) _csv_buffer[_csv_index++] = boneOrigins[i][d];
     }
+
+    SDVector &u = state.u;
+    for_(j, LEN_U) {
+        _csv_buffer[_csv_index++] = u[j];
+    }
 }
 void csv_exit() {
-    FILE *file = dll_agnostic_fopen("spine.csv", "w");
+    FILE *file = dll_asserted_agnostic_fopen("spine.csv", "w");
     int CSV_NUMBER_OF_RIGID_BODIES = (ROBOT_NUMBER_OF_SEGMENTS + 1) + (INCLUDE_PYRAMID_CAP ? 1 : 0);
-    int CSV_NUM_COLUMNS = 1 + 3 * CSV_NUMBER_OF_RIGID_BODIES;
+    int CSV_NUM_COLUMNS = 1 + 3 * CSV_NUMBER_OF_RIGID_BODIES + LEN_U;
     {
         fprintf(file, "time (seconds),");
         for_(i, CSV_NUMBER_OF_RIGID_BODIES) {
             fprintf(file, "x_%d,", i);
             fprintf(file, "y_%d,", i);
             fprintf(file, "z_%d,", i);
+        }
+        for_(j, LEN_U) {
+            fprintf(file, "u_%d,", j);
         }
         fprintf(file, "\n");
     }
@@ -260,7 +269,7 @@ int balloon_number_of_balloons;
 vec3 balloon_positions[BALLOON_MAXIMUM_NUMBER_OF_BALLOONS];
 real balloon_radius = 0.1;
 void balloon_init() {
-    FILE *file = dll_agnostic_fopen("balloon_config.txt", "r");
+    FILE *file = dll_asserted_agnostic_fopen("balloon_config.txt", "r");
     char buffer[4096];
     while (fgets(buffer, _COUNT_OF(buffer), file) != NULL) {
         ASSERT(balloon_number_of_balloons < BALLOON_MAXIMUM_NUMBER_OF_BALLOONS);
@@ -269,20 +278,25 @@ void balloon_init() {
     }
     fclose(file);
 }
-delegate int cpp_get_number_of_balloons() {
+delegate int cpp_getNumberOfBalloons() {
     return balloon_number_of_balloons;
 }
-delegate void cpp_get_balloon_positions(void *balloons) {
+delegate void cpp_getBalloonPositions(void *balloons__FLOAT3_ARRAY) {
     for_(i, balloon_number_of_balloons) {
         for_(d, 3) {
-            ((UnityVertexAttributeFloat*) balloons)[3 * i + d] = (UnityVertexAttributeFloat)(balloon_positions[i][d]);
+            ((UnityVertexAttributeFloat*) balloons__FLOAT3_ARRAY)[3 * i + d] = (UnityVertexAttributeFloat)(_ZZZ(d) * balloon_positions[i][d]);
         }
     }
 }
 
 
-
-
+delegate int cpp_AUTO_TEST() {
+    FILE *file = dll_asserted_agnostic_fopen("unity_config.txt", "r");
+    int result;
+    fscanf(file, "%d", &result);
+    fclose(file);
+    return result;
+}
 
 bool CPP_HACK_RUNNING_ON_UNITY__NOTE_FOR_GPU_STUFF;
 
@@ -702,16 +716,26 @@ delegate void cpp_solve(
         }
     }
 
-    csv_solve(currentState.x); // FORNOW
+    csv_solve(currentState); // FORNOW
 
     { // marshall mesh
         SDVector vertex_normals = sim.get_vertex_normals(currentState.x);
         for_(k, LEN_X) {
-            int d = k / 3;
+            int d = k % 3;
             ((UnityVertexAttributeFloat *) vertex_positions__FLOAT3_ARRAY)[k] = UnityVertexAttributeFloat(_ZZZ(d) * currentState.x[k]);
             ((UnityVertexAttributeFloat *) vertex_normals__FLOAT3_ARRAY)[k] = UnityVertexAttributeFloat(_ZZZ(d) * vertex_normals[k]);
         }
-        for_(k, 3 * sim.num_triangles) ((UnityTriangleIndexInt *) triangle_indices__UINT_ARRAY)[k] = (UnityTriangleIndexInt) ((int *) sim.triangle_indices)[k];
+        for_(k, 3 * sim.num_triangles) {
+            ((UnityTriangleIndexInt *) triangle_indices__UINT_ARRAY)[k] = (UnityTriangleIndexInt) ((int *) sim.triangle_indices)[k];
+        }
+        #ifdef JIM_DLL
+        // need to flip orientation for unity (ew)
+        for_(i, sim.num_triangles) {
+            UnityTriangleIndexInt tmp = ((UnityTriangleIndexInt *) triangle_indices__UINT_ARRAY)[3 * i + 0];
+            ((UnityTriangleIndexInt *) triangle_indices__UINT_ARRAY)[3 * i + 0] = ((UnityTriangleIndexInt *) triangle_indices__UINT_ARRAY)[3 * i + 1];
+            ((UnityTriangleIndexInt *) triangle_indices__UINT_ARRAY)[3 * i + 1] = tmp;
+        }
+        #endif
         for_(indexOfFeaturePointToSet, num_feature_points) {
             vec3 tmp = (_DRAGON_DRIVING__SET_IN_CPP_INIT)
                 ? skinnedGet(mesh, currentBones, featurePoints[indexOfFeaturePointToSet])

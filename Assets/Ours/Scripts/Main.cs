@@ -313,7 +313,9 @@ unsafe public class Main : MonoBehaviour {
     NativeArray<int> _widgetTargetEnabled;
     NativeArray<float3> _widgetTargetPositions;
     NativeArray<float3> _widgetFeaturePointPositions; 
-    GameObject widgetMainCamera__FOR_LINE_RENDERER_SCALING;
+    Camera mainCamera;
+    Camera figureCamera;
+    GameObject boxGameObject;
     void WidgetAwake() {
         widgetWidgetsParentObject = GAME_OBJECT_CREATE("widgetWidgetsParentObject");
         widgetNumberOfActiveWidgets = 0;
@@ -354,7 +356,6 @@ unsafe public class Main : MonoBehaviour {
         _widgetTargetEnabled = new NativeArray<int>(widgetMaximumNumberOfActiveWidgets, Allocator.Persistent);
         _widgetTargetPositions = new NativeArray<float3>(widgetMaximumNumberOfActiveWidgets, Allocator.Persistent);
         _widgetFeaturePointPositions = new NativeArray<float3>(widgetMaximumNumberOfActiveWidgets, Allocator.Persistent);
-        widgetMainCamera__FOR_LINE_RENDERER_SCALING = GameObject.Find("Main Camera");
     }
     void WidgetActivate(Vector3 position) {
         UNITY_ASSERT(widgetNumberOfActiveWidgets < widgetMaximumNumberOfActiveWidgets);
@@ -374,7 +375,7 @@ unsafe public class Main : MonoBehaviour {
         for (int i = 0; i < widgetMaximumNumberOfActiveWidgets; ++i) {
             Vector3 a = widgetFeaturePointGameObjects[i].transform.position;
             Vector3 b = widgetTargetGameObjects[i].transform.position;
-            Vector3 o = widgetMainCamera__FOR_LINE_RENDERER_SCALING.transform.position;
+            Vector3 o = mainCamera.gameObject.transform.position;
             widgetLineRenderers[i].SetPosition(0, a);
             widgetLineRenderers[i].SetPosition(1, b);
             widgetLineRenderers[i].startWidth = 0.0166f / 2f + Vector3.Distance(o, a) / 33.0f;
@@ -494,12 +495,13 @@ unsafe public class Main : MonoBehaviour {
         getCables          = (cpp_getCables)          Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_getCables"),          typeof(cpp_getCables));
         getNumberOfBalloons          = (cpp_getNumberOfBalloons)          Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_getNumberOfBalloons"),          typeof(cpp_getNumberOfBalloons));
         getBalloonPositions          = (cpp_getBalloonPositions)          Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_getBalloonPositions"),          typeof(cpp_getBalloonPositions));
-       AUTO_TEST          = (cpp_AUTO_TEST)          Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_AUTO_TEST"),          typeof(cpp_AUTO_TEST));
+        AUTO_TEST          = (cpp_AUTO_TEST)          Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_AUTO_TEST"),          typeof(cpp_AUTO_TEST));
     }
 
 
 
     int balloonNumberOfBalloons;
+    GameObject balloonParentObject;
     Vector3[] balloonPositions;
     GameObject[] balloonGameObjects;
     int balloonNumberPopped;
@@ -528,6 +530,10 @@ unsafe public class Main : MonoBehaviour {
     void Awake () {
         Application.targetFrameRate = 60;
         DLLAwake();
+
+        mainCamera = GameObject.Find("Main Camera").GetComponent<Camera>();
+        figureCamera = GameObject.Find("Figure Camera").GetComponent<Camera>();
+        boxGameObject = GameObject.Find("Box");
 
         cameraOffset = GameObject.Find("CameraOffset");
 
@@ -569,7 +575,7 @@ unsafe public class Main : MonoBehaviour {
             }
 
             balloonGameObjects = new GameObject[balloonNumberOfBalloons];
-            GameObject balloonParentObject = GAME_OBJECT_CREATE("balloonParentObject");
+            balloonParentObject = GAME_OBJECT_CREATE("balloonParentObject");
             GameObject prefabBalloon = PREFAB_LOAD("prefabBalloon");
             for (int i = 0; i < balloonNumberOfBalloons; ++i) {
                 balloonGameObjects[i] = PREFAB_INSTANTIATE(prefabBalloon, "balloon " + i, balloonParentObject);
@@ -600,9 +606,20 @@ unsafe public class Main : MonoBehaviour {
     }
 
     void Update () {
-        if (Input.GetKey(KeyCode.Q)) {
+        if (Input.GetKeyDown(KeyCode.Q)) {
             UNITY_QUIT__NOTE_CALL_RETURN_IF_IN_UPDATE();
             return;
+        }
+
+        if (Input.GetKeyDown(KeyCode.A)) {
+            mainCamera.enabled = !mainCamera.enabled;
+            figureCamera.enabled = !figureCamera.enabled;
+        }
+        if (Input.GetKeyDown(KeyCode.B)) {
+            GAME_OBJECT_SET_WHETHER_DRAWING(boxGameObject, !GAME_OBJECT_IS_DRAWING(boxGameObject));
+        }
+        if (Input.GetKeyDown(KeyCode.C)) {
+            GAME_OBJECT_SET_WHETHER_DRAWING(balloonParentObject, !GAME_OBJECT_IS_DRAWING(balloonParentObject));
         }
 
         if (AUTO_TEST_DO_TEST) {

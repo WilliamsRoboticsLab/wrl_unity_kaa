@@ -1,1 +1,1 @@
-0 // 0 for regular use; 1 to automatically go slowly in a circle
+1 // 0 for regular use; 1 to automatically go slowly in a circle

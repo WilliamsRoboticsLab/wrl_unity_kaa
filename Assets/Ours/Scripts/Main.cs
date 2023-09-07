@@ -461,7 +461,9 @@ unsafe public class Main : MonoBehaviour {
             void *feature_point_positions__FLOAT3__ARRAY = null);
     delegate int cpp_getNumberOfBalloons();
     delegate void cpp_getBalloonPositions(void *balloons__FLOAT3_ARRAY);
-    delegate int cpp_AUTO_TEST();
+    delegate int cpp_getAUTO_TEST();
+    delegate float cpp_getCircleY();
+    delegate float cpp_getCircleRadius();
 
 
     cpp_send2motors        send2motors;
@@ -477,7 +479,9 @@ unsafe public class Main : MonoBehaviour {
     cpp_getCables          getCables;
     cpp_getNumberOfBalloons getNumberOfBalloons;
     cpp_getBalloonPositions getBalloonPositions;
-    cpp_AUTO_TEST AUTO_TEST;
+    cpp_getAUTO_TEST getAUTO_TEST;
+    cpp_getCircleY getCircleY;
+    cpp_getCircleRadius getCircleRadius;
 
     void DLLAwake() {
         library = LoadLibrary("snake");
@@ -495,7 +499,9 @@ unsafe public class Main : MonoBehaviour {
         getCables          = (cpp_getCables)          Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_getCables"),          typeof(cpp_getCables));
         getNumberOfBalloons          = (cpp_getNumberOfBalloons)          Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_getNumberOfBalloons"),          typeof(cpp_getNumberOfBalloons));
         getBalloonPositions          = (cpp_getBalloonPositions)          Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_getBalloonPositions"),          typeof(cpp_getBalloonPositions));
-        AUTO_TEST          = (cpp_AUTO_TEST)          Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_AUTO_TEST"),          typeof(cpp_AUTO_TEST));
+        getAUTO_TEST = (cpp_getAUTO_TEST) Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_getAUTO_TEST"), typeof(cpp_getAUTO_TEST));
+        getCircleY = (cpp_getCircleY) Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_getCircleY"), typeof(cpp_getCircleY));
+        getCircleRadius = (cpp_getCircleRadius) Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_getCircleRadius"), typeof(cpp_getCircleRadius));
     }
 
 
@@ -592,7 +598,7 @@ unsafe public class Main : MonoBehaviour {
 
         SolveWrapper(); 
 
-        AUTO_TEST_DO_TEST = (AUTO_TEST() == 1);
+        AUTO_TEST_DO_TEST = (getAUTO_TEST() == 1);
         if (AUTO_TEST_DO_TEST) {
             CastRayWrapper(new Vector3(0.0f, -1.0f, 0.0f), new Vector3(0.0f, 1.0f, 0.0f), true);
             if (!AUTO_TEST_SINUSOIDAL_TEST) {
@@ -625,10 +631,12 @@ unsafe public class Main : MonoBehaviour {
         if (AUTO_TEST_DO_TEST) {
             jimAutomatedTestTime += 0.004f;
             if (AUTO_TEST_SINUSOIDAL_TEST) {
+                float y = getCircleY();
+                float r = getCircleRadius();
                 widgetTargetGameObjects[0].transform.position = new Vector3(
-                        Mathf.Min(1.0f, jimAutomatedTestTime) * 0.4f * Mathf.Cos(jimAutomatedTestTime),
-                        -0.6f,
-                        Mathf.Min(1.0f, jimAutomatedTestTime) * 0.4f * Mathf.Sin(jimAutomatedTestTime)
+                        Mathf.Min(1.0f, jimAutomatedTestTime) * r * Mathf.Cos(jimAutomatedTestTime),
+                        y,
+                        Mathf.Min(1.0f, jimAutomatedTestTime) * r * Mathf.Sin(jimAutomatedTestTime)
                         );
             } else {
                 // if (jimAutomatedTestTime > 0.66f && _JIM_AUTOMATED_TEST_PHASE__NOTE_NOT_USED_BY_SINUOSOIDAL_TEST == 0) {

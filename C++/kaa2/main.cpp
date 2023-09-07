@@ -290,12 +290,41 @@ delegate void cpp_getBalloonPositions(void *balloons__FLOAT3_ARRAY) {
 }
 
 
-delegate int cpp_AUTO_TEST() {
+struct {
+    int AUTO_TEST;
+    float CircleY;
+    float CircleRadius;
+} unity_config;
+
+void cpp_unity_config_load() {
     FILE *file = dll_asserted_agnostic_fopen("unity_config.txt", "r");
-    int result;
-    fscanf(file, "%d", &result);
+
+    int lineNumber = 0;
+    char line[4096];
+    while (fgets(line, _COUNT_OF(line), file) != NULL) {
+        double tmp;
+        if (lineNumber == 0) {
+            sscanf(line, "%d", &unity_config.AUTO_TEST);
+        } else if (lineNumber == 1) {
+            sscanf(line, "%lf", &tmp);
+            unity_config.CircleY = float(tmp);
+        } else if (lineNumber == 2) {
+            sscanf(line, "%lf", &tmp);
+            unity_config.CircleRadius = float(tmp);
+        }
+        ++lineNumber;
+    }
     fclose(file);
-    return result;
+}
+delegate int cpp_getAUTO_TEST() {
+    return unity_config.AUTO_TEST;
+}
+delegate float cpp_getCircleY() {
+    return unity_config.CircleY;
+
+}
+delegate float cpp_getCircleRadius() {
+    return unity_config.CircleRadius;
 }
 
 bool CPP_HACK_RUNNING_ON_UNITY__NOTE_FOR_GPU_STUFF;
@@ -310,6 +339,7 @@ delegate void cpp_reset() {
     currentBones = getBones(currentState.x);
 }
 delegate void cpp_init(bool _DRAGON_DRIVING = false) {
+    cpp_unity_config_load();
     {
         char path[256];
         GetCurrentDirectory(_COUNT_OF(path), path);

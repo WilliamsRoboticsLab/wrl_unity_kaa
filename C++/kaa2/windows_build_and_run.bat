@@ -45,7 +45,7 @@ IF defined argv[--help] (
     codebase\ext\windows_glfw3.lib 
 
     cl     /Femain.exe                                   !COMMON! 
-    cl /LD /Fesnake.dll /DJIM_DLL /DJIM_REDIRECT_PRINTF_TO_LOG_TXT !COMMON! && copy /Y snake.dll ..\..\snake.dll && copy /Y snake.dll "C:\Users\Jim\Desktop\tmp\Build\snake.dll" && del snake.dll
+    REM cl /LD /Fesnake.dll /DJIM_DLL /DJIM_REDIRECT_PRINTF_TO_LOG_TXT !COMMON! && copy /Y snake.dll ..\..\snake.dll && copy /Y snake.dll "C:\Users\Jim\Desktop\tmp\Build\snake.dll" && del snake.dll
 
     IF EXIST "main.exe" (
         IF defined argv[--debug-vscode] (

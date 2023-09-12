@@ -15,6 +15,8 @@ int IK_MAX_LINE_SEARCH_STEPS = 8;
 
 #include "include.cpp"
 
+bool KAA_CPP_INIT_FLAG = false;
+bool USE_FRANCESCO_STL_INSTEAD = true;
 bool _DRAGON_SHOW;
 bool _DRAGON_DRIVING__SET_IN_CPP_INIT;
 
@@ -66,18 +68,23 @@ IntersectionResult ray_mesh_intersection(vec3 ray_origin, vec3 ray_direction, co
 #include "fbo.cpp"
 
 
-FILE *dll_asserted_agnostic_fopen(char *filename, char *mode) {
+void dll_agnostic_path(char *dst, int COUNT_OF_dst, char *filename) {
+    GetCurrentDirectory(COUNT_OF_dst, dst);
+    strcat(dst, "\\");
+    strcat(dst, filename);
+}
+
+FILE *dll_agnostic_fopen(char *filename, char *mode) {
     char path[256];
-    GetCurrentDirectory(_COUNT_OF(path), path);
-    strcat(path, "\\");
-    strcat(path, filename);
+    dll_agnostic_path(path, _COUNT_OF(path), filename);
     FILE *result = fopen(path, mode);
     ASSERT(result);
     return result;
 }
 
 
-IndexedTriangleMesh3D dragonBody; // FORNOW
+IndexedTriangleMesh3D dragon; // FORNOW
+real dragonAnimationTime;
 
 boolean MESH_9_12_TOGGLE = false;
 int _9_12() { return (!MESH_9_12_TOGGLE) ? 9 : 12; }
@@ -123,17 +130,20 @@ typedef int      UnityGeneralPurposeInt;
 
 #define LEN_U sim.num_cables
 #define LEN_X (SOFT_ROBOT_DIM * sim.num_nodes)
-#define LEN_S (3 * dragonBody.num_vertices)
+#define LEN_S (3 * dragon.num_vertices)
 
 delegate UnityGeneralPurposeInt cpp_getNumVertices() { return sim.num_nodes; }
 delegate UnityGeneralPurposeInt cpp_getNumTriangles() { return sim.num_triangles; }
 bool initialized;
 
 typedef FixedSizeSelfDestructingArray<mat4> Bones;
-const int DRAGON_NUM_BONES = MESH_NUMBER_OF_NODE_LAYERS - 1 + (INCLUDE_PYRAMID_CAP ? 1 : 0);
-vec3 boneOriginsRest[DRAGON_NUM_BONES + 1]; // ? okay FORNOW
-FixedSizeSelfDestructingArray<vec3> getBoneOrigins(SDVector &x) {
-    FixedSizeSelfDestructingArray<vec3> result(DRAGON_NUM_BONES + 1);
+const int DRAGON_BODY_NUM_BONES = MESH_NUMBER_OF_NODE_LAYERS - 1;
+const int DRAGON_HEAD_NUM_BONES = 1;
+const int DRAGON_NUM_BONES = DRAGON_BODY_NUM_BONES + DRAGON_HEAD_NUM_BONES;
+
+vec3 bodyBoneOriginsRest[DRAGON_BODY_NUM_BONES + 1]; // ? okay FORNOW
+FixedSizeSelfDestructingArray<vec3> getBodyBoneOrigins(SDVector &x) {
+    FixedSizeSelfDestructingArray<vec3> result(DRAGON_BODY_NUM_BONES + 1);
     for_(j, result.N) {
         if (j != result.N - 1) {
             result[j] = get(x, _9_12() + j * (_10_13()));
@@ -145,31 +155,48 @@ FixedSizeSelfDestructingArray<vec3> getBoneOrigins(SDVector &x) {
 }
 Bones getBones(SDVector &x) {
     Bones result(DRAGON_NUM_BONES);
-    FixedSizeSelfDestructingArray<vec3> boneOrigins = getBoneOrigins(x);
-    vec3 boneNegativeYAxis[DRAGON_NUM_BONES];
-    vec3 bonePositiveXAxis[DRAGON_NUM_BONES];
-    {
-        vec3 boneXAxisFeaturePoint[DRAGON_NUM_BONES + 1]; {
-            for_(j, boneOrigins.N) {
-                boneXAxisFeaturePoint[j] = get(x, 0 + j * 10);
+    FixedSizeSelfDestructingArray<vec3> bodyBoneOrigins = getBodyBoneOrigins(x);
+    { // body
+        vec3 bodyBoneNegativeYAxis[DRAGON_BODY_NUM_BONES];
+        vec3 bodyBonePositiveXAxis[DRAGON_BODY_NUM_BONES];
+        {
+            vec3 bodyBoneXAxisFeaturePoint[DRAGON_BODY_NUM_BONES + 1]; {
+                for_(j, bodyBoneOrigins.N) {
+                    bodyBoneOrigins              [j] = get(x, 9 + j * 10);
+                    bodyBoneXAxisFeaturePoint    [j] = get(x, 0 + j * 10);
+                }
+            }
+            {
+                for_(j, _COUNT_OF(bodyBoneNegativeYAxis)) {
+                    bodyBoneNegativeYAxis[j] = normalized(bodyBoneOrigins[j + 1] - bodyBoneOrigins[j]);
+                    bodyBonePositiveXAxis[j] = normalized(bodyBoneXAxisFeaturePoint[j] - bodyBoneOrigins[j]);
+                }
             }
         }
         {
-            for_(j, _COUNT_OF(boneNegativeYAxis)) {
-                boneNegativeYAxis[j] = normalized(boneOrigins[j + 1] - boneOrigins[j]);
-                bonePositiveXAxis[j] = normalized(boneXAxisFeaturePoint[j] - boneOrigins[j]);
+            for_(bone_i, DRAGON_BODY_NUM_BONES) {
+                vec3 y_hat = -bodyBoneNegativeYAxis[bone_i];
+                vec3 x_hat = bodyBonePositiveXAxis[bone_i];
+                vec3 z_hat = cross(x_hat, y_hat);
+                mat4 invBind = M4_Translation(-bodyBoneOriginsRest[bone_i]);
+                mat4 Bone = M4_xyzo(x_hat, y_hat, z_hat, bodyBoneOrigins[bone_i]);
+                result[bone_i] = Bone * invBind;
             }
         }
     }
-    {
-        for_(bone_i, DRAGON_NUM_BONES) {
-            vec3 y_hat = -boneNegativeYAxis[bone_i];
-            vec3 x_hat = bonePositiveXAxis[bone_i];
-            vec3 z_hat = cross(x_hat, y_hat);
-            mat4 invBind = M4_Translation(-boneOriginsRest[bone_i]);
-            mat4 Bone = M4_xyzo(x_hat, y_hat, z_hat, boneOrigins[bone_i]);
-            result[bone_i] = Bone * invBind;
-        }
+    { // head
+        // FORNOW: hacky, with few dependencies
+
+        vec3 y_hat = -normalized(bodyBoneOrigins[DRAGON_BODY_NUM_BONES] - bodyBoneOrigins[DRAGON_BODY_NUM_BONES - 1]);
+        vec3 up = { 0.0, 1.0, 0.0 };
+        vec3 x_hat = cross(y_hat, up);
+        x_hat = IS_ZERO(squaredNorm(x_hat)) ? V3(1.0, 0.0, 0.0) : normalized(x_hat);
+        vec3 z_hat = cross(x_hat, y_hat);
+        mat4 M = M4_xyzo(x_hat, y_hat, z_hat, bodyBoneOrigins[DRAGON_BODY_NUM_BONES]);
+        result[DRAGON_BODY_NUM_BONES] = M
+            * M4_RotationAboutYAxis(0.2 * sin(4.0 * dragonAnimationTime))
+            * M4_RotationAboutXAxis(0.2 * sin(2.0 * dragonAnimationTime));
+
     }
     return result;
 }
@@ -218,7 +245,7 @@ void csv_solve(State state) {
         _csv_initialized = true;
         _csv_start_time = util_timestamp_in_milliseconds();
     }
-    FixedSizeSelfDestructingArray<vec3> boneOrigins = getBoneOrigins(x); // FORNOW
+    FixedSizeSelfDestructingArray<vec3> boneOrigins = getBodyBoneOrigins(x); // FORNOW
     _csv_buffer[_csv_index++] = (util_timestamp_in_milliseconds() - _csv_start_time) / 1000.0;
     for_(i, boneOrigins.N) {
         bool isMarkerRigidBodyLayer = false; {
@@ -244,7 +271,7 @@ void csv_solve(State state) {
     }
 }
 void csv_exit() {
-    FILE *file = dll_asserted_agnostic_fopen("spine.csv", "w");
+    FILE *file = dll_agnostic_fopen("spine.csv", "w");
     int CSV_NUMBER_OF_RIGID_BODIES = (ROBOT_NUMBER_OF_SEGMENTS + 1) + (INCLUDE_PYRAMID_CAP ? 1 : 0);
     int CSV_NUM_COLUMNS = 1 + 3 * CSV_NUMBER_OF_RIGID_BODIES + LEN_U;
     {
@@ -278,7 +305,7 @@ int balloon_number_of_balloons;
 vec3 balloon_positions[BALLOON_MAXIMUM_NUMBER_OF_BALLOONS];
 real balloon_radius = 0.1;
 void balloon_init() {
-    FILE *file = dll_asserted_agnostic_fopen("balloon_config.txt", "r");
+    FILE *file = dll_agnostic_fopen("balloon_config.txt", "r");
     char buffer[4096];
     while (fgets(buffer, _COUNT_OF(buffer), file) != NULL) {
         ASSERT(balloon_number_of_balloons < BALLOON_MAXIMUM_NUMBER_OF_BALLOONS);
@@ -306,7 +333,7 @@ struct {
 } unity_config;
 
 void cpp_unity_config_load() {
-    FILE *file = dll_asserted_agnostic_fopen("unity_config.txt", "r");
+    FILE *file = dll_agnostic_fopen("unity_config.txt", "r");
 
     int lineNumber = 0;
     char line[4096];
@@ -454,7 +481,7 @@ delegate void cpp_init(bool _DRAGON_DRIVING = false) {
                     sbuff_push_back(&num_vias, cable_num_vias);
 
                     int i_0; {
-                        
+
                         i_0 = cable_group + ((!MESH_9_12_TOGGLE) ? 3 : 4) * d;
                         if (cable_group >= 1) i_0 +=     (MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_UPPER_SEGMENT * MESH_NUMBER_OF_NODES_PER_NODE_LAYER);
                         if (cable_group >= 2) i_0 += 2 * (MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_LOWER_SEGMENT * MESH_NUMBER_OF_NODES_PER_NODE_LAYER);
@@ -498,6 +525,111 @@ delegate void cpp_init(bool _DRAGON_DRIVING = false) {
     sim.getNext(&currentState); // FORNOW: global_U_xx
 
 
+    { // set up skinned mesh
+        IndexedTriangleMesh3D _dragonHead;
+        IndexedTriangleMesh3D _dragonBody;
+        { //CARL load meshes
+            char pwd[256];
+            #ifdef COW_OS_WINDOWS
+            GetCurrentDirectory(_COUNT_OF(pwd), pwd);
+            #else
+            getcwd(pwd, _COUNT_OF(pwd));
+            #endif
+            // printf("\n\n");
+            // printf(pwd);
+            // printf("\n");
+
+            // imagine we knew what directory we were in
+
+            char headPath[256];
+            char bodyPath[256];
+            dll_agnostic_path(headPath, _COUNT_OF(headPath), "dragon_head.obj");
+            dll_agnostic_path(bodyPath, _COUNT_OF(bodyPath), "dragon_body.obj");
+
+            _dragonHead = _meshutil_indexed_triangle_mesh_load(headPath, false, true, false);
+            _dragonBody = _meshutil_indexed_triangle_mesh_load(bodyPath, false, true, false);;
+
+            mat4 RS = M4_RotationAboutXAxis(PI / 2) * M4_Scaling(0.05);
+            _dragonHead._applyTransform(RS);
+            _dragonBody._applyTransform(M4_Translation(0.0, -0.67, 0.0) * RS);
+        }
+
+        { // create bones in mesh
+            { // body
+                _dragonBody.num_bones = DRAGON_BODY_NUM_BONES;
+                _dragonBody.bones        = (mat4 *) malloc(_dragonBody.num_bones    * sizeof(mat4));
+                _dragonBody.bone_indices = (int4 *) malloc(_dragonBody.num_vertices * sizeof(int4));
+                _dragonBody.bone_weights = (vec4 *) malloc(_dragonBody.num_vertices * sizeof(vec4));
+            }
+            { // head
+                _dragonHead.num_bones = DRAGON_HEAD_NUM_BONES;
+                _dragonHead.bones        = (mat4 *) malloc(_dragonHead.num_bones    * sizeof(mat4));
+                _dragonHead.bone_indices = (int4 *) malloc(_dragonHead.num_vertices * sizeof(int4));
+                _dragonHead.bone_weights = (vec4 *) malloc(_dragonHead.num_vertices * sizeof(vec4));
+            }
+        }
+
+
+        { // assign indices and weights
+            { // body
+                { // set bones rest positions (body only)
+                    for_(j, _COUNT_OF(bodyBoneOriginsRest)) {
+                        bodyBoneOriginsRest[j] = get(sim.x_rest, 9 + j * 10);
+                    }
+                }
+                for_(vertex_i, _dragonBody.num_vertices) {
+                    auto f = [&](int i) {
+                        real c = AVG(bodyBoneOriginsRest[i].y, bodyBoneOriginsRest[i + 1].y);
+                        real D = ABS(_dragonBody.vertex_positions[vertex_i].y - c);
+                        return MAX(0.0, (1.0 / D) - 10.0);
+                    };
+
+                    real t = INVERSE_LERP(_dragonBody.vertex_positions[vertex_i].y, 0.0, -ROBOT_LENGTH);
+                    real b = t * _dragonBody.num_bones;
+
+                    int j = MIN(MAX(int(b + 0.5), 0), _dragonBody.num_bones - 1);
+                    int i = MAX(0, j - 1);
+                    int k = MIN(_dragonBody.num_bones - 1, j + 1);
+
+                    _dragonBody.bone_indices[vertex_i] = { i, j, k };
+                    _dragonBody.bone_weights[vertex_i] = { f(i), f(j), f(k) };
+                    _dragonBody.bone_weights[vertex_i] /= sum(_dragonBody.bone_weights[vertex_i]);
+
+                    jim_sort_against(
+                            (int *) &_dragonBody.bone_indices[vertex_i],
+                            4,
+                            sizeof(int),
+                            (real *) &_dragonBody.bone_weights[vertex_i],
+                            true);
+                    _dragonBody.bone_indices[vertex_i] = { 
+                        _dragonBody.bone_indices[vertex_i][3],
+                        _dragonBody.bone_indices[vertex_i][2],
+                        _dragonBody.bone_indices[vertex_i][1],
+                        _dragonBody.bone_indices[vertex_i][0],
+                    };
+                    _dragonBody.bone_weights[vertex_i] = {
+                        _dragonBody.bone_weights[vertex_i][3],
+                        _dragonBody.bone_weights[vertex_i][2],
+                        _dragonBody.bone_weights[vertex_i][1],
+                        _dragonBody.bone_weights[vertex_i][0],
+                    };
+
+                    ASSERT(_dragonBody.bone_weights[vertex_i][0] >= _dragonBody.bone_weights[vertex_i][1]);
+                    ASSERT(_dragonBody.bone_weights[vertex_i][1] >= _dragonBody.bone_weights[vertex_i][2]);
+                    ASSERT(_dragonBody.bone_weights[vertex_i][2] >= _dragonBody.bone_weights[vertex_i][3]);
+                }
+            }
+            { // head
+                for_(i, _dragonHead.num_vertices) {
+                    _dragonHead.bone_indices[i] = { 0 };  
+                    _dragonHead.bone_weights[i] = { 1.0 };  
+                }
+            }
+        }
+        dragon = _dragonBody + _dragonHead;
+    }
+
+
     cpp_reset();
 }
 
@@ -527,8 +659,8 @@ delegate bool cpp_castRay(
     IntersectionResult result; {
         if (_DRAGON_DRIVING__SET_IN_CPP_INIT) {
             if (CPP_HACK_RUNNING_ON_UNITY__NOTE_FOR_GPU_STUFF) cow_begin_frame();
-            dragonBody.bones = currentBones.data;
-            result = GPU_pick(ray_origin, ray_direction, &dragonBody);
+            dragon.bones = currentBones.data;
+            result = GPU_pick(ray_origin, ray_direction, &dragon);
         } else {
             result = ray_mesh_intersection(ray_origin, ray_direction, currentState.x, sim.num_triangles, sim.triangle_indices);
         }
@@ -571,7 +703,7 @@ delegate void cpp_solve(
         for_(i, MAX_NUM_FEATURE_POINTS) relax &= (!targetEnabled[i]);
     }
 
-    IndexedTriangleMesh3D *mesh = &dragonBody;
+    IndexedTriangleMesh3D *mesh = &dragon;
 
     { // step ik
         static real Q_c      = 1.0;
@@ -672,7 +804,7 @@ delegate void cpp_solve(
                                                 }
                                             }
                                             { // X FORNOW SO HACKY
-                                                for_(bone_i, DRAGON_NUM_BONES + 1) {
+                                                for_(bone_i, DRAGON_BODY_NUM_BONES + 1) {
                                                     sbuff_push_back(&X_node_indices, _9_12() + bone_i * _10_13());
                                                     sbuff_push_back(&X_node_indices, 0 + bone_i * _10_13());
                                                 }
@@ -803,7 +935,7 @@ void KAA_reset() {
 }
 bool KAA_AUTOMATED_SPEED_TEST__QUITS_AFTER_A_COUPLE_SECONDS = false; // TODO: this crashes if true?
 void kaa() {
-    cpp_init(false);
+    cpp_init(KAA_CPP_INIT_FLAG);
     KAA_reset();
 
     UnityVertexAttributeFloat *SPOOF_vertex_positions = (UnityVertexAttributeFloat *) calloc(LEN_X, sizeof(UnityVertexAttributeFloat));
@@ -818,6 +950,8 @@ void kaa() {
         mat4 P = camera_get_P(&camera);
         mat4 V = camera_get_V(&camera);
         mat4 PV = P * V;
+
+        dragonAnimationTime += 0.0167; // FORNOW
 
 
         auto draw_sphere = [&](vec3 position, real radius = 0.0, vec3 color = monokai.white) {
@@ -905,6 +1039,9 @@ void kaa() {
                         eso_end();
                     }
                 }
+            } else {
+                dragon.bones = currentBones.data;
+                dragon.draw(P, V, globals.Identity);
             }
 
 
@@ -1125,611 +1262,8 @@ void jones() {
 void main() {
     omp_set_num_threads(6);
     APPS {
-        APP(jones);
-        // APP(kaa);
+        // APP(jones);
+        APP(kaa);
         // APP(eg_fbo);
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#if 0
-//CARL
-void jonesUpdateCableReferenceLengths() {
-    State copy = currentState;
-
-    printf("\nBEFORE: ");
-    for(int i = 0; i < sim.num_cables; i++) {
-        printf("%lf ", sim.cableReferenceLengths[i]);
-    }
-
-    copy.enabled__BIT_FIELD |= ~CABLES;
-    copy = sim.getNext(&copy);
-    sim.cableReferenceLengths = sim.getCableLengths(copy.x);
-
-    printf("\nAFTER: ");
-    for(int i = 0; i < sim.num_cables; i++) {
-        printf("%lf ", sim.cableReferenceLengths[i]);
-    }
-}
-
-const int JOSIE_NUM_FRAMES = 15649;
-const int JOSIE_NUM_RIGID_BODIES = 7;
-const int JOSIE_NUM_CABLES = 9;
-const int JOSIE_NUM_CABLE_POSITIONS = 38;
-const int JOSIE_NUM_MARKERS = 28;
-
-void jones() {
-
-    static vec3 rigidbodies[JOSIE_NUM_RIGID_BODIES][JOSIE_NUM_FRAMES];
-    static vec3 markerpositions[JOSIE_NUM_MARKERS][JOSIE_NUM_FRAMES];
-    static real tendonlengths[JOSIE_NUM_CABLES][JOSIE_NUM_CABLE_POSITIONS];
-    static vec3 generated_positions[JOSIE_NUM_CABLE_POSITIONS+1];
-
-    //Reading in the rigidbody position file
-    FILE *file = fopen("rigidbodydata.csv", "r");
-    ASSERT(file);
-    char data_buffer[4096];
-    int count = 0;
-    while (fgets(data_buffer, _COUNT_OF(data_buffer), file) != NULL) {
-        sscanf(data_buffer, "%lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf",
-                &rigidbodies[0][count].x, &rigidbodies[0][count].y, &rigidbodies[0][count].z, &rigidbodies[1][count].x, &rigidbodies[1][count].y, &rigidbodies[1][count].z,
-                &rigidbodies[2][count].x, &rigidbodies[2][count].y, &rigidbodies[2][count].z, &rigidbodies[3][count].x, &rigidbodies[3][count].y, &rigidbodies[3][count].z,
-                &rigidbodies[4][count].x, &rigidbodies[4][count].y, &rigidbodies[4][count].z, &rigidbodies[5][count].x, &rigidbodies[5][count].y, &rigidbodies[5][count].z,
-                &rigidbodies[6][count].x, &rigidbodies[6][count].y, &rigidbodies[6][count].z);
-        for (int i = 0; i < JOSIE_NUM_RIGID_BODIES; i++) {
-            rigidbodies[i][count] = cwiseProduct(rigidbodies[i][count], V3(1, 1, 1) * 0.001); //Was V3(-1, 1, -1)
-        }
-        count++;
-    }
-    fclose(file);
-
-    //Reading in the marker position file
-    file = fopen("markerdata.csv", "r");
-    ASSERT(file);
-    char* token;
-    count = 0;
-    while (fgets(data_buffer, _COUNT_OF(data_buffer), file) != NULL) {
-        int index = 0;
-        token = strtok(data_buffer, ",");
-        while(token != NULL) {
-            markerpositions[index/3][count][index%3] = std::atof(token) * 0.001;
-            index++;
-            token = strtok(NULL, ",");
-        }
-        count++;
-    }
-    fclose(file);
-
-
-    vec3 x = rigidbodies[0][0];
-    for(int i = 0; i < JOSIE_NUM_FRAMES; i++) {
-        for(int j = 0; j < JOSIE_NUM_RIGID_BODIES; j++) {
-            rigidbodies[j][i] -= x;
-        }
-        for(int k = 0; k < JOSIE_NUM_MARKERS; k++) {
-            markerpositions[k][i] -= x;
-        }
-    }
-
-    file = fopen("tendonlengthdata.csv", "r");
-    ASSERT(file);
-    count = 0;
-    while (fgets(data_buffer, _COUNT_OF(data_buffer), file) != NULL) {
-        sscanf(data_buffer, "%lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf",
-                &tendonlengths[0][count], &tendonlengths[1][count], &tendonlengths[2][count], 
-                &tendonlengths[3][count], &tendonlengths[4][count], &tendonlengths[5][count], 
-                &tendonlengths[6][count], &tendonlengths[7][count], &tendonlengths[8][count]);
-        for (int i = 0; i < JOSIE_NUM_CABLES; i++) {
-            tendonlengths[i][count] = (0.001 * tendonlengths[i][count]);
-        }
-        count++;
-    }
-    fclose(file);
-
-    int time_start              = 0;
-    int time_end                = JOSIE_NUM_FRAMES - 1;
-    bool playing                = false;
-    bool generating             = false;
-    bool generate_has_run       = false;
-    int generate_curr_state     = -1;
-    real generate_time          = 0.0;
-    bool free_sliders           = false;
-    int robot_state             = 0;
-    int robot_angle             = 170;
-    int kaa_draw_mode           = 1;
-    int robot_draw_mode         = 3;
-    real cable_input_multiplier = 1.0;
-
-    cpp_init();
-
-    Camera3D camera = { 1.7 * ROBOT_LENGTH, RAD(60), 0.0, 0.0, 0.0, -0.5 * ROBOT_LENGTH };
-
-    while (cow_begin_frame()) {
-
-        camera_move(&camera);
-        mat4 P = camera_get_P(&camera);
-        mat4 V = camera_get_V(&camera);
-        mat4 PV = P * V;
-
-        gui_checkbox("Generating", &generating, 'o');
-        gui_checkbox("Playing", &playing, 'p');
-
-        //ROBOT
-        {
-
-            gui_printf("");
-            gui_printf("ROBOT");
-            gui_slider("Draw Mode", &robot_draw_mode, 0, 9, 'n', 'm', true);
-
-            if (playing) {
-                time_end++;
-                if (time_end >= JOSIE_NUM_FRAMES) time_end = 0;
-
-                gui_slider("Time start", &time_start, 0, JOSIE_NUM_FRAMES, 't', 'y');
-                gui_printf("Time end %d", time_end);
-                if (time_start > time_end) time_start = time_end;
-            }
-            else {
-                gui_slider("Time start", &time_start, 0, JOSIE_NUM_FRAMES, 't', 'y');
-                if (time_start > time_end) time_end = time_start;
-                gui_slider("Time end", &time_end, 0, JOSIE_NUM_FRAMES, 'g','h');
-                if (time_start > time_end) time_start = time_end;
-            }
-
-            gui_printf("%d frames in range", 1 + time_end - time_start);
-
-            gui_slider("Angle", &robot_angle, 0, 360);
-            mat4 Mrobot = M4_RotationAboutYAxis(RAD(robot_angle));
-
-            if(robot_draw_mode > 2) {
-                for(int i = robot_draw_mode > 5 ? JOSIE_NUM_RIGID_BODIES - 1: 0; i < JOSIE_NUM_RIGID_BODIES; i++) {
-                    soup_draw(PV * Mrobot, SOUP_LINE_STRIP, 1 + time_end - time_start, &(rigidbodies[i][time_start]),
-                            NULL, monokai.red * ((playing && robot_draw_mode != 3) ? 0.5 : 1.0), 10);
-                }
-            }
-
-            if(robot_draw_mode%3 > 0){
-                glDisable(GL_DEPTH_TEST);
-                eso_begin(PV * Mrobot, SOUP_LINE_STRIP, 2);
-                eso_color(monokai.white);
-                for(int i = 0; i < JOSIE_NUM_RIGID_BODIES; i++) {
-                    eso_vertex(rigidbodies[i][time_end]);
-                }
-                eso_end();
-                eso_begin(PV * Mrobot, SOUP_POINTS, 10);
-                if (robot_draw_mode % 3 == 2) {
-                    eso_color(monokai.yellow);
-                    for(int i = 0; i < JOSIE_NUM_MARKERS; i++) {
-                        eso_vertex(markerpositions[i][time_end]);
-                    }
-                }
-                eso_color(monokai.white);
-                for(int i = 0; i < JOSIE_NUM_RIGID_BODIES; i++) {
-                    eso_vertex(rigidbodies[i][time_end]);
-                }
-                eso_end();
-                glEnable(GL_DEPTH_TEST);
-            }
-        }
-
-        //KAA
-        {
-            gui_printf("");
-            gui_printf("KAA");
-
-            gui_slider("Draw Mode", &kaa_draw_mode, 0, 3, 'u', 'i', true);
-
-            if(!generating) {
-                generate_time = 0.0;
-
-                gui_checkbox("Free Sliders", &free_sliders);
-
-                if (gui_button("reset", 'r')) {
-                    if (!free_sliders) robot_state = 0;
-                    cpp_reset();
-                }
-
-                { // parameter sliders
-                    gui_slider("tetMassDensity", &tetMassDensity, 0.0, 1000.0);
-                    gui_slider("tetYoungsModulus", &tetYoungsModulus, 2.0, 8.0, false, true);
-                    gui_slider("tetPoissonsRatio", &tetPoissonsRatio, 0.01, 0.49);
-                    gui_slider("cable input multiplier", &cable_input_multiplier, 0.5, 3.0);
-                }
-                /**
-                  if (gui_button("update cable reference lengths")) {
-                  jonesUpdateCableReferenceLengths();
-                  }
-                 **/
-                if (gui_button("disable / enable cables", 'c')) currentState.enabled__BIT_FIELD ^= CABLES;
-
-                if(free_sliders){
-                    for_(j, sim.num_cables) {
-                        char buffer[] = "u_?";
-                        buffer[2] = char('0' + j);
-                        real a = (j < 3) ? ROBOT_SEGMENT_LENGTH : 2 * ROBOT_SEGMENT_LENGTH;
-                        gui_slider(buffer, &currentState.u[j], -a, a);
-                    }
-                }
-                else {
-                    gui_slider("Kaa State", &robot_state, 0, JOSIE_NUM_CABLE_POSITIONS, 'j', 'k');
-                    for_(j, sim.num_cables) {
-                        currentState.u[j] = tendonlengths[j][robot_state] * cable_input_multiplier;
-                        //gui_printf("u%d: %lf\n", j, tendonlengths[j][robot_state] * cable_input_multiplier);
-                    }
-                }
-            }
-            else {
-                if (generate_time == 0.0) generate_curr_state = -1;
-                generate_has_run = true;
-                if (generate_curr_state != (int)(generate_time/0.5)) {
-                    generated_positions[(int)(generate_time/0.5)] = get(currentState.x, 9 + NUM_BONES * 10);
-                }
-                generate_curr_state = (int)(generate_time/0.5);
-                gui_printf("Kaa State: %d", generate_curr_state);
-                if (generate_curr_state > JOSIE_NUM_CABLE_POSITIONS) {
-                    generate_time = 0.0;
-                    generating = false;
-                }
-                else {
-                    for_(j, sim.num_cables) {
-                        currentState.u[j] = tendonlengths[j][generate_curr_state] * cable_input_multiplier;
-                        gui_printf("u%d: %lf\n", j, tendonlengths[j][generate_curr_state] * cable_input_multiplier);
-                    }
-                    generate_time += 0.0167;
-                }
-            }
-
-            currentState = sim.getNext(&currentState);
-
-            if (kaa_draw_mode == 2) {
-                sim.draw(P * V, &currentState);
-                /**
-                  int num_cables = cpp_getNumCables();
-                  int total_vias = cpp_getTotalNumVias();
-                  int* vias_per_cable = new int[num_cables];
-                  float* via_positions = new float[total_vias];
-                  float* tensions = new float[num_cables];
-
-                  cpp_getNumViasPerCable((void*)vias_per_cable);
-                  cpp_getCables(via_positions, tensions);
-
-                  gui_printf("Num Cables: %d", num_cables);
-                  gui_printf("Num Vias: %d", total_vias);
-                  for (int i = 0; i < num_cables / 3; i++) {
-                  gui_printf("%d\t%d\t%d", vias_per_cable[3*i], vias_per_cable[3*i+1], vias_per_cable[3*i+2]);
-                  }
-                 **/
-            }
-            else if (kaa_draw_mode == 1) {
-                vec3 spine_positions[NUM_BONES+1];
-                for_(j, NUM_BONES+1) {
-                    spine_positions[j] = get(currentState.x, 9 + j * 10);
-                }
-                soup_draw(PV, SOUP_LINE_STRIP, NUM_BONES+1, spine_positions, NULL, monokai.blue, 3);
-                soup_draw(PV, SOUP_POINTS, NUM_BONES+1, spine_positions, NULL, monokai.white, 10);
-            }
-            if (generate_has_run) soup_draw(PV, SOUP_LINE_STRIP, generate_curr_state,
-                    generated_positions, NULL, monokai.purple, 10);
-        }
-    }
-}
-
-//END CARL
-
-delegate void cpp_dragon_yzoHead (
-        void *bones_y,
-        void *bones_z,
-        void *bones_o) {
-
-    vec3 y = -normalized(get(currentState.x, 9 + (NUM_BONES) * 10) - get(currentState.x, 9 + (NUM_BONES - 1) * 10));
-    vec3 up = { 0.0, 1.0, 0.0 }; 
-    vec3 x = normalized(cross(y, up));
-    vec3 z = cross(x, y);
-    vec3 o = get(currentState.x, 9 + (NUM_BONES) * 10);
-
-    float y_floats[3] = {(float)(y.x), (float)(y.y), (float)(y.z)};
-    float z_floats[3] = {(float)(z.x), (float)(z.y), (float)(z.z)};
-    float o_floats[3] = {(float)(o.x), (float)(o.y), (float)(o.z)};
-
-    for_(i, 3) {
-        ((float *) bones_y)[i] = y_floats[i];
-        ((float *) bones_z)[i] = z_floats[i];
-        ((float *) bones_o)[i] = o_floats[i];
-    }
-}
-
-
-delegate UnityGeneralPurposeInt cpp_dragon_getNumVertices(UnityGeneralPurposeInt mesh_index) {
-    IndexedTriangleMesh3D mesh = mesh_index ? dragonBody : _dragonHead;
-    return mesh.num_vertices;
-}
-
-delegate UnityGeneralPurposeInt cpp_dragon_getNumTriangles(UnityGeneralPurposeInt mesh_index) {
-    IndexedTriangleMesh3D mesh = mesh_index ? dragonBody : _dragonHead;
-    return mesh.num_triangles;
-}
-
-delegate UnityGeneralPurposeInt cpp_dragon_getNumBones() { return NUM_BONES; }
-
-delegate void cpp_dragon_getMesh (
-        UnityGeneralPurposeInt mesh_index,
-        void *vertex_positions,
-        void *vertex_normals,
-        void *vertex_colors,
-        void *triangle_indices) {
-
-    IndexedTriangleMesh3D mesh = mesh_index ? dragonBody : _dragonHead;
-
-    for (int k = 0; k < cpp_dragon_getNumVertices(mesh_index); k++) {
-        for_(d, 3) {
-            ((UnityVertexAttributeFloat*) vertex_positions)[3 * k + d] = (UnityVertexAttributeFloat)(mesh.vertex_positions[k][d]);
-            ((UnityVertexAttributeFloat*)   vertex_normals)[3 * k + d] = (UnityVertexAttributeFloat)(mesh.vertex_normals  [k][d]);
-        }
-        for_(d, 4) {
-            ((UnityVertexAttributeFloat*) vertex_colors)[4 * k + d] = (d == 3) ? (UnityVertexAttributeFloat)(1.0)
-                : (UnityVertexAttributeFloat)(mesh.vertex_colors[k][d]);
-        }
-    }
-    for (int k = 0; k < cpp_dragon_getNumTriangles(mesh_index); k++) {
-        for_(d, 3) {
-            ((UnityTriangleIndexInt*) triangle_indices)[3 * k + d] = (UnityTriangleIndexInt)(mesh.triangle_indices[k][d]);
-        }
-    }
-}
-// TODO: GPU picking
-// TODO: make line and spheres show up through the transparent mesh as well
-// TODO: see if you can run cow while running an app in VR
-// TODO: floor
-// TODO: revisit the hessian (kim-style SparseMatrix parallel add?)
-// TODO: talking to motors
-// TODO: linear blend skinning in a vertex shader
-//       get space fish back up and running
-// TODO: #define in build.bat for gui stuff
-// TODO: split IK line search between frames
-// TODO: dFdu sparse matrix (why did this fail last time?)
-// TODO: should x be a FixedSizeSelfDestructingArray<vec3>?
-// // (waiting on josie) real-world trajectory Figure
-// play more with sim params
-// play more with ik weights
-// // visualization
-// pipe and sphere widget
-// cable slack visualization
-// // fun
-// ordering juggling clubs
-// // cow
-// port MIN, MAX, etc. to be functions
-
-
-
-
-
-
-
-
-// bones
-
-
-// C++
-// - IK
-
-// C#
-// - controllers
-// - draw
-// -- (GPU)
-// --- "skinning" - vertex shader
-
-
-IndexedTriangleMesh3D _dragonHead;
-IndexedTriangleMesh3D dragonBody;
-delegate void cpp_dragon_initializeBones (
-        void *bones_y,
-        void *bones_z,
-        void *bones_o,
-        void *bone_indices,
-        void *bone_weights) {
-
-    ASSERT(initialized);
-
-    // TODO: this shouldn't be here
-    for(int i = 0; i < NUM_BONES; i++) {
-        for_(d, 3) {
-            ((UnityVertexAttributeFloat*) bones_y)[3 * i + d] = (UnityVertexAttributeFloat)(currentBones[i](d, 1));
-            ((UnityVertexAttributeFloat*) bones_z)[3 * i + d] = (UnityVertexAttributeFloat)(currentBones[i](d, 2));
-            ((UnityVertexAttributeFloat*) bones_o)[3 * i + d] = (UnityVertexAttributeFloat)(currentBones[i](d, 3));
-        }
-    }
-
-    for(int i = 0; i < dragonBody.num_vertices; i++) {
-        for_(j, 4) {
-            ((UnityGeneralPurposeInt*)    bone_indices)[4 * i + j] = (UnityGeneralPurposeInt)(   dragonBody.bone_indices[i][j]);
-            ((UnityVertexAttributeFloat*) bone_weights)[4 * i + j] = (UnityVertexAttributeFloat)(dragonBody.bone_weights[i][j]);
-        }
-    }
-}
-
-if (0) { // set up skinned mesh
-    { //CARL load meshes
-        char headPath[256];
-        char bodyPath[256];
-        ASSERT(0);
-
-        // printf("HeadPath: %s", headPath);
-        // printf("\n");
-
-        _dragonHead = _meshutil_indexed_triangle_mesh_load(headPath, false, true, false);
-        dragonBody = _meshutil_indexed_triangle_mesh_load(bodyPath, false, true, false);
-        mat4 RS = M4_RotationAboutXAxis(PI / 2) * M4_Scaling(0.05);
-        _dragonHead._applyTransform(RS);
-        dragonBody._applyTransform(M4_Translation(0.0, -0.67, 0.0) * RS);
-    }
-
-    { // create bones in mesh
-        dragonBody.num_bones = DRAGON_NUM_BONES;
-        dragonBody.bones = (mat4 *) malloc(DRAGON_NUM_BONES * sizeof(mat4));
-        dragonBody.bone_indices = (int4 *) malloc(dragonBody.num_vertices * sizeof(int4));
-        dragonBody.bone_weights = (vec4 *) malloc(dragonBody.num_vertices * sizeof(vec4));
-    }
-
-    { // set bones rest positions
-        for_(j, _COUNT_OF(boneOriginsRest)) {
-            boneOriginsRest[j] = get(sim.x_rest, 9 + j * 10);
-        }
-    }
-
-    { // assign weights FORNOW hacky nonsense
-        for_(vertex_i, dragonBody.num_vertices) {
-            auto f = [&](int i) {
-                real c = AVG(boneOriginsRest[i].y, boneOriginsRest[i + 1].y);
-                real D = ABS(dragonBody.vertex_positions[vertex_i].y - c);
-                return MAX(0.0, (1.0 / D) - 10.0);
-            };
-
-            real t = INVERSE_LERP(dragonBody.vertex_positions[vertex_i].y, 0.0, -ROBOT_LENGTH);
-            real b = t * dragonBody.num_bones;
-
-            int j = MIN(MAX(int(b + 0.5), 0), dragonBody.num_bones - 1);
-            int i = MAX(0, j - 1);
-            int k = MIN(dragonBody.num_bones - 1, j + 1);
-
-            dragonBody.bone_indices[vertex_i] = { i, j, k };
-            dragonBody.bone_weights[vertex_i] = { f(i), f(j), f(k) };
-            dragonBody.bone_weights[vertex_i] /= sum(dragonBody.bone_weights[vertex_i]);
-
-            jim_sort_against(
-                    (int *) &dragonBody.bone_indices[vertex_i],
-                    4,
-                    sizeof(int),
-                    (real *) &dragonBody.bone_weights[vertex_i],
-                    true);
-            dragonBody.bone_indices[vertex_i] = { 
-                dragonBody.bone_indices[vertex_i][3],
-                dragonBody.bone_indices[vertex_i][2],
-                dragonBody.bone_indices[vertex_i][1],
-                dragonBody.bone_indices[vertex_i][0],
-            };
-            dragonBody.bone_weights[vertex_i] = {
-                dragonBody.bone_weights[vertex_i][3],
-                dragonBody.bone_weights[vertex_i][2],
-                dragonBody.bone_weights[vertex_i][1],
-                dragonBody.bone_weights[vertex_i][0],
-            };
-
-            ASSERT(dragonBody.bone_weights[vertex_i][0] >= dragonBody.bone_weights[vertex_i][1]);
-            ASSERT(dragonBody.bone_weights[vertex_i][1] >= dragonBody.bone_weights[vertex_i][2]);
-            ASSERT(dragonBody.bone_weights[vertex_i][2] >= dragonBody.bone_weights[vertex_i][3]);
-        }
-    }
-}
-
-else { // skinning
-    dragonBody.bones = currentBones.data;
-    dragonBody.draw(P, V, globals.Identity);
-
-    { // _dragonHead
-        // FORNOW: hacky, with few dependencies
-        vec3 y = -normalized(get(currentState.x, 9 + (NUM_BONES) * 10) - get(currentState.x, 9 + (NUM_BONES - 1) * 10));
-        vec3 up = { 0.0, 1.0, 0.0 };
-        vec3 x = cross(y, up);
-        x = IS_ZERO(squaredNorm(x)) ? V3(1.0, 0.0, 0.0) : normalized(x);
-        vec3 z = cross(x, y);
-        vec3 o = get(currentState.x, 9 + (NUM_BONES) * 10);
-        _dragonHead.draw(P, V, M4_xyzo(x, y, z, o));
-    }
-}
-
-delegate void cpp_dragon_yzoBones(
-        void *bones_y,
-        void *bones_z,
-        void *bones_o) {
-
-    for(int i = 0; i < NUM_BONES; i++) {
-        for_(d, 3) {
-            ((UnityVertexAttributeFloat*) bones_y)[3 * i + d] = (UnityVertexAttributeFloat)(currentBones[i](d, 1));
-            ((UnityVertexAttributeFloat*) bones_z)[3 * i + d] = (UnityVertexAttributeFloat)(currentBones[i](d, 2));
-            ((UnityVertexAttributeFloat*) bones_o)[3 * i + d] = (UnityVertexAttributeFloat)(currentBones[i](d, 3));
-        }
-    }
-}
-#endif

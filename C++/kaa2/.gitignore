@@ -11,3 +11,5 @@ main.obj
 main.lib
 snake.dll
 snake.lib
+WithBase.stl
+spine.csv

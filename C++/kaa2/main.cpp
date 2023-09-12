@@ -15,7 +15,7 @@ int IK_MAX_LINE_SEARCH_STEPS = 8;
 
 #include "include.cpp"
 
-bool KAA_CPP_INIT_FLAG = false;
+bool KAA_CPP_INIT_FLAG = true;
 bool USE_FRANCESCO_STL_INSTEAD = true;
 bool _DRAGON_SHOW;
 bool _DRAGON_DRIVING__SET_IN_CPP_INIT;
@@ -795,6 +795,7 @@ delegate void cpp_solve(
                                 Eigen::SparseMatrix<real> SPARSE_dsdx(LEN_S, LEN_X); {
                                     real delta = 1e-5;
                                     StretchyBuffer<OptEntry> triplets = {}; {
+                                        // sparse finite difference
                                         StretchyBuffer<int> S_node_indices = {};
                                         StretchyBuffer<int> X_node_indices = {};
                                         {

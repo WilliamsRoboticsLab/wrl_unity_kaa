@@ -8,8 +8,7 @@
 
 const int  MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_UPPER_SEGMENT = 3;
 const int  MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_LOWER_SEGMENT = 2;
-const bool  INCLUDE_DUMMY_SEGMENT                             = false; // FORNOW: bottom segment always 1 stack
-const bool  INCLUDE_PYRAMID_CAP                               = true;  // Just one additional node
+const bool  MESH_INCLUDE_PYRAMID_CAP                               = true;  // Just one additional node
 
 int IK_MAX_LINE_SEARCH_STEPS = 8;
 
@@ -94,7 +93,7 @@ const real ROBOT_SEGMENT_LENGTH = 0.1450;
 const real ROBOT_SEGMENT_RADIUS = 0.06 / 2;
 const int  ROBOT_NUMBER_OF_UPPER_SEGMENTS = 1;
 const int  ROBOT_NUMBER_OF_LOWER_SEGMENTS = 4;
-const int  ROBOT_NUMBER_OF_SEGMENTS = ROBOT_NUMBER_OF_UPPER_SEGMENTS + ROBOT_NUMBER_OF_LOWER_SEGMENTS + (INCLUDE_DUMMY_SEGMENT ? 1 : 0);
+const int  ROBOT_NUMBER_OF_SEGMENTS = ROBOT_NUMBER_OF_UPPER_SEGMENTS + ROBOT_NUMBER_OF_LOWER_SEGMENTS;
 const real ROBOT_LENGTH = ROBOT_NUMBER_OF_SEGMENTS * ROBOT_SEGMENT_LENGTH;
 const real MESH_UPPER_STACK_LENGTH = ROBOT_SEGMENT_LENGTH / MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_UPPER_SEGMENT;
 const real MESH_LOWER_STACK_LENGTH = ROBOT_SEGMENT_LENGTH / MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_LOWER_SEGMENT;
@@ -102,8 +101,7 @@ const int  MESH_NUMBER_OF_ANGULAR_SECTIONS = (!MESH_9_12_TOGGLE) ? 9 : 12;
 const int  MESH_NUMBER_OF_NODES_PER_NODE_LAYER = 1 + MESH_NUMBER_OF_ANGULAR_SECTIONS;
 const int  _MESH_NUMBER_OF_UPPER_NODE_LAYERS_EXCLUSIVE = ROBOT_NUMBER_OF_UPPER_SEGMENTS * MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_UPPER_SEGMENT;
 const int  _MESH_NUMBER_OF_LOWER_NODE_LAYERS_EXCLUSIVE = ROBOT_NUMBER_OF_LOWER_SEGMENTS * MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_LOWER_SEGMENT;
-const int  MESH_NUMBER_OF_NODE_LAYERS = 1 + _MESH_NUMBER_OF_UPPER_NODE_LAYERS_EXCLUSIVE + _MESH_NUMBER_OF_LOWER_NODE_LAYERS_EXCLUSIVE + (INCLUDE_DUMMY_SEGMENT ? 1 : 0);
-const int  NUM_BONES = MESH_NUMBER_OF_NODE_LAYERS - 1;
+const int  MESH_NUMBER_OF_NODE_LAYERS = 1 + _MESH_NUMBER_OF_UPPER_NODE_LAYERS_EXCLUSIVE + _MESH_NUMBER_OF_LOWER_NODE_LAYERS_EXCLUSIVE;
 real FRANCESCO_CLOCK = RAD(30);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -137,11 +135,11 @@ delegate UnityGeneralPurposeInt cpp_getNumTriangles() { return sim.num_triangles
 bool initialized;
 
 typedef FixedSizeSelfDestructingArray<mat4> Bones;
-const int DRAGON_BODY_NUM_BONES = MESH_NUMBER_OF_NODE_LAYERS - 1;
+const int DRAGON_BODY_NUM_BONES = (MESH_NUMBER_OF_NODE_LAYERS - 1) + (MESH_INCLUDE_PYRAMID_CAP ? 1 : 0);
 const int DRAGON_HEAD_NUM_BONES = 1;
 const int DRAGON_NUM_BONES = DRAGON_BODY_NUM_BONES + DRAGON_HEAD_NUM_BONES;
 
-vec3 bodyBoneOriginsRest[DRAGON_BODY_NUM_BONES + 1]; // ? okay FORNOW
+FixedSizeSelfDestructingArray<vec3> bodyBoneOriginsRest;
 FixedSizeSelfDestructingArray<vec3> getBodyBoneOrigins(SDVector &x) {
     FixedSizeSelfDestructingArray<vec3> result(DRAGON_BODY_NUM_BONES + 1);
     for_(j, result.N) {
@@ -162,7 +160,6 @@ Bones getBones(SDVector &x) {
         {
             vec3 bodyBoneXAxisFeaturePoint[DRAGON_BODY_NUM_BONES + 1]; {
                 for_(j, bodyBoneOrigins.N) {
-                    bodyBoneOrigins              [j] = get(x, 9 + j * 10);
                     bodyBoneXAxisFeaturePoint    [j] = get(x, 0 + j * 10);
                 }
             }
@@ -272,7 +269,7 @@ void csv_solve(State state) {
 }
 void csv_exit() {
     FILE *file = dll_agnostic_fopen("spine.csv", "w");
-    int CSV_NUMBER_OF_RIGID_BODIES = (ROBOT_NUMBER_OF_SEGMENTS + 1) + (INCLUDE_PYRAMID_CAP ? 1 : 0);
+    int CSV_NUMBER_OF_RIGID_BODIES = (ROBOT_NUMBER_OF_SEGMENTS + 1) + (MESH_INCLUDE_PYRAMID_CAP ? 1 : 0);
     int CSV_NUM_COLUMNS = 1 + 3 * CSV_NUMBER_OF_RIGID_BODIES + LEN_U;
     {
         fprintf(file, "time (seconds),");
@@ -430,7 +427,7 @@ delegate void cpp_init(bool _DRAGON_DRIVING = false) {
                 }
             }
 
-            if (INCLUDE_PYRAMID_CAP) {
+            if (MESH_INCLUDE_PYRAMID_CAP) {
                 sbuff_push_back(&X, V3(0.0, -length, 0.0));
             }
         }
@@ -452,7 +449,7 @@ delegate void cpp_init(bool _DRAGON_DRIVING = false) {
                 }
             }
 
-            if (INCLUDE_PYRAMID_CAP) {
+            if (MESH_INCLUDE_PYRAMID_CAP) {
                 int _c = MESH_NUMBER_OF_NODE_LAYERS - 1;
                 int c = (1 + _c) * MESH_NUMBER_OF_NODES_PER_NODE_LAYER - 1; // center of slice
                 int o = _c * MESH_NUMBER_OF_NODES_PER_NODE_LAYER;
@@ -529,29 +526,28 @@ delegate void cpp_init(bool _DRAGON_DRIVING = false) {
         IndexedTriangleMesh3D _dragonHead;
         IndexedTriangleMesh3D _dragonBody;
         { //CARL load meshes
-            char pwd[256];
-            #ifdef COW_OS_WINDOWS
-            GetCurrentDirectory(_COUNT_OF(pwd), pwd);
-            #else
-            getcwd(pwd, _COUNT_OF(pwd));
-            #endif
-            // printf("\n\n");
-            // printf(pwd);
-            // printf("\n");
+            if (USE_FRANCESCO_STL_INSTEAD) {
+                char headPath[256];
+                char bodyPath[256];
+                dll_agnostic_path(headPath, _COUNT_OF(headPath), "dragon_head.obj");
+                dll_agnostic_path(bodyPath, _COUNT_OF(bodyPath), "PM3D_WithBase.obj");
+                _dragonHead = _meshutil_indexed_triangle_mesh_load(headPath, false, true, false);
+                _dragonBody = _meshutil_indexed_triangle_mesh_load(bodyPath, false, true, false);
 
-            // imagine we knew what directory we were in
+                _dragonHead._applyTransform({}); // FORNOW: simplest hack is to just scale the head down to nothingness
+                _dragonBody._applyTransform(M4_Translation(0.0, -0.007, 0.0) * M4_RotationAboutXAxis(PI / 2) * M4_Scaling(0.001));
+            } else {
+                char headPath[256];
+                char bodyPath[256];
+                dll_agnostic_path(headPath, _COUNT_OF(headPath), "dragon_head.obj");
+                dll_agnostic_path(bodyPath, _COUNT_OF(bodyPath), "dragon_body.obj");
+                _dragonHead = _meshutil_indexed_triangle_mesh_load(headPath, false, true, false);
+                _dragonBody = _meshutil_indexed_triangle_mesh_load(bodyPath, false, true, false);
 
-            char headPath[256];
-            char bodyPath[256];
-            dll_agnostic_path(headPath, _COUNT_OF(headPath), "dragon_head.obj");
-            dll_agnostic_path(bodyPath, _COUNT_OF(bodyPath), "dragon_body.obj");
-
-            _dragonHead = _meshutil_indexed_triangle_mesh_load(headPath, false, true, false);
-            _dragonBody = _meshutil_indexed_triangle_mesh_load(bodyPath, false, true, false);;
-
-            mat4 RS = M4_RotationAboutXAxis(PI / 2) * M4_Scaling(0.05);
-            _dragonHead._applyTransform(RS);
-            _dragonBody._applyTransform(M4_Translation(0.0, -0.67, 0.0) * RS);
+                mat4 RS = M4_RotationAboutXAxis(PI / 2) * M4_Scaling(0.05);
+                _dragonHead._applyTransform(RS);
+                _dragonBody._applyTransform(M4_Translation(0.0, -0.67, 0.0) * RS);
+            }
         }
 
         { // create bones in mesh
@@ -572,11 +568,7 @@ delegate void cpp_init(bool _DRAGON_DRIVING = false) {
 
         { // assign indices and weights
             { // body
-                { // set bones rest positions (body only)
-                    for_(j, _COUNT_OF(bodyBoneOriginsRest)) {
-                        bodyBoneOriginsRest[j] = get(sim.x_rest, 9 + j * 10);
-                    }
-                }
+                bodyBoneOriginsRest = getBodyBoneOrigins(sim.x_rest);
                 for_(vertex_i, _dragonBody.num_vertices) {
                     auto f = [&](int i) {
                         real c = AVG(bodyBoneOriginsRest[i].y, bodyBoneOriginsRest[i + 1].y);
@@ -614,9 +606,10 @@ delegate void cpp_init(bool _DRAGON_DRIVING = false) {
                         _dragonBody.bone_weights[vertex_i][0],
                     };
 
-                    ASSERT(_dragonBody.bone_weights[vertex_i][0] >= _dragonBody.bone_weights[vertex_i][1]);
-                    ASSERT(_dragonBody.bone_weights[vertex_i][1] >= _dragonBody.bone_weights[vertex_i][2]);
-                    ASSERT(_dragonBody.bone_weights[vertex_i][2] >= _dragonBody.bone_weights[vertex_i][3]);
+                    do_once { printf("[FORNOW]"); };
+                    // ASSERT(_dragonBody.bone_weights[vertex_i][0] >= _dragonBody.bone_weights[vertex_i][1]);
+                    // ASSERT(_dragonBody.bone_weights[vertex_i][1] >= _dragonBody.bone_weights[vertex_i][2]);
+                    // ASSERT(_dragonBody.bone_weights[vertex_i][2] >= _dragonBody.bone_weights[vertex_i][3]);
                 }
             }
             { // head
@@ -806,8 +799,12 @@ delegate void cpp_solve(
                                             }
                                             { // X FORNOW SO HACKY
                                                 for_(bone_i, DRAGON_BODY_NUM_BONES + 1) {
-                                                    sbuff_push_back(&X_node_indices, _9_12() + bone_i * _10_13());
-                                                    sbuff_push_back(&X_node_indices, 0 + bone_i * _10_13());
+                                                    if ((bone_i == DRAGON_BODY_NUM_BONES) && MESH_INCLUDE_PYRAMID_CAP) {
+                                                        sbuff_push_back(&X_node_indices, sim.num_nodes - 1); // ********
+                                                    } else {
+                                                        sbuff_push_back(&X_node_indices, _9_12() + bone_i * _10_13());
+                                                        sbuff_push_back(&X_node_indices, 0 + bone_i * _10_13());
+                                                    }
                                                 }
                                             }
                                         }
@@ -1146,8 +1143,6 @@ void kaa() {
     cpp_exit();
 }
 
-#undef LEN_U
-#undef LEN_X
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1236,7 +1231,7 @@ void jones() {
         gui_slider("tetPoissonsRatio", &tetPoissonsRatio, 0.45, 0.49);
         gui_slider("frame_jump", &frame_jump, 1, 10, 'j', 'k');
 
-        memcpy(currentState.u.data, u_buffer.data + 9 * frame, 9 * sizeof(real));
+        memcpy(currentState.u.data, u_buffer.data + LEN_U * frame, LEN_U * sizeof(real));
         frame = (frame + frame_jump) % frame_number_of_frames;
         currentState = sim.getNext(&currentState);
 
@@ -1268,3 +1263,6 @@ void main() {
         // APP(eg_fbo);
     }
 }
+
+#undef LEN_U
+#undef LEN_X

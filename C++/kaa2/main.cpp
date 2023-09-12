@@ -14,10 +14,10 @@ int IK_MAX_LINE_SEARCH_STEPS = 8;
 
 #include "include.cpp"
 
-bool KAA_CPP_INIT_FLAG = true;
+bool KAA_CPP_INIT_FLAG_TO_MAKE_DRAGON_DRIVING = true;
 bool USE_FRANCESCO_STL_INSTEAD = true;
-bool _DRAGON_SHOW;
-bool _DRAGON_DRIVING__SET_IN_CPP_INIT;
+
+
 
 struct IntersectionResult {
     bool hit;
@@ -82,6 +82,8 @@ FILE *dll_agnostic_fopen(char *filename, char *mode) {
 }
 
 
+bool _DRAGON_SHOW;
+bool _DRAGON_DRIVING__SET_IN_CPP_INIT;
 IndexedTriangleMesh3D dragon; // FORNOW
 real dragonAnimationTime;
 
@@ -136,7 +138,7 @@ bool initialized;
 
 typedef FixedSizeSelfDestructingArray<mat4> Bones;
 const int DRAGON_BODY_NUM_BONES = (MESH_NUMBER_OF_NODE_LAYERS - 1) + (MESH_INCLUDE_PYRAMID_CAP ? 1 : 0);
-const int DRAGON_HEAD_NUM_BONES = 1;
+const int DRAGON_HEAD_NUM_BONES = (USE_FRANCESCO_STL_INSTEAD) ? 0 : 1;
 const int DRAGON_NUM_BONES = DRAGON_BODY_NUM_BONES + DRAGON_HEAD_NUM_BONES;
 
 FixedSizeSelfDestructingArray<vec3> bodyBoneOriginsRest;
@@ -181,7 +183,7 @@ Bones getBones(SDVector &x) {
             }
         }
     }
-    { // head
+    if (DRAGON_HEAD_NUM_BONES) { // head
         // FORNOW: hacky, with few dependencies
 
         vec3 y_hat = -normalized(bodyBoneOrigins[DRAGON_BODY_NUM_BONES] - bodyBoneOrigins[DRAGON_BODY_NUM_BONES - 1]);
@@ -189,7 +191,7 @@ Bones getBones(SDVector &x) {
         vec3 x_hat = cross(y_hat, up);
         x_hat = IS_ZERO(squaredNorm(x_hat)) ? V3(1.0, 0.0, 0.0) : normalized(x_hat);
         vec3 z_hat = cross(x_hat, y_hat);
-        mat4 M = M4_xyzo(x_hat, y_hat, z_hat, bodyBoneOrigins[DRAGON_BODY_NUM_BONES]);
+        mat4 M = M4_xyzo(x_hat, y_hat, z_hat, bodyBoneOrigins[DRAGON_BODY_NUM_BONES - 1]);
         result[DRAGON_BODY_NUM_BONES] = M
             * M4_RotationAboutYAxis(0.2 * sin(4.0 * dragonAnimationTime))
             * M4_RotationAboutXAxis(0.2 * sin(2.0 * dragonAnimationTime));
@@ -527,15 +529,11 @@ delegate void cpp_init(bool _DRAGON_DRIVING = false) {
         IndexedTriangleMesh3D _dragonBody;
         { //CARL load meshes
             if (USE_FRANCESCO_STL_INSTEAD) {
-                char headPath[256];
                 char bodyPath[256];
-                dll_agnostic_path(headPath, _COUNT_OF(headPath), "dragon_head.obj");
                 dll_agnostic_path(bodyPath, _COUNT_OF(bodyPath), "PM3D_WithBase.obj");
-                _dragonHead = _meshutil_indexed_triangle_mesh_load(headPath, false, true, false);
                 _dragonBody = _meshutil_indexed_triangle_mesh_load(bodyPath, false, true, false);
-
-                _dragonHead._applyTransform({}); // FORNOW: simplest hack is to just scale the head down to nothingness
                 _dragonBody._applyTransform(M4_Translation(0.0, -0.007, 0.0) * M4_RotationAboutXAxis(PI / 2) * M4_Scaling(0.001));
+                _dragonHead = {};
             } else {
                 char headPath[256];
                 char bodyPath[256];
@@ -933,7 +931,7 @@ void KAA_reset() {
 }
 bool KAA_AUTOMATED_SPEED_TEST__QUITS_AFTER_A_COUPLE_SECONDS = false; // TODO: this crashes if true?
 void kaa() {
-    cpp_init(KAA_CPP_INIT_FLAG);
+    cpp_init(KAA_CPP_INIT_FLAG_TO_MAKE_DRAGON_DRIVING);
     KAA_reset();
 
     UnityVertexAttributeFloat *SPOOF_vertex_positions = (UnityVertexAttributeFloat *) calloc(LEN_X, sizeof(UnityVertexAttributeFloat));

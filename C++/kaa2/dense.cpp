@@ -107,6 +107,28 @@ struct SDMatrix {
         ASSERT(c < C);
         return data[r * C + c];
     }
+
+    SDMatrix(const SDMatrix &other) {
+        this->R = other.R;
+        this->C = other.C;
+        this->data = (real *) calloc(this->R * this->C, sizeof(real));
+        memcpy(this->data, other.data, this->R * this->C * sizeof(real));
+    }
+
+    SDMatrix &operator = (const SDMatrix &other) {
+        ASSERT(this != &other);
+        if (this->R * this->C != other.R * other.C) {
+            free(this->data);
+            this->data = (real *) malloc(other.R * other.C * sizeof(real));
+        }
+        memcpy(this->data, other.data, other.R * other.C * sizeof(real));
+        this->R = other.R;
+        this->C = other.C;
+        return *this;
+    }
+    ~SDMatrix() {
+        if (this->R != 0 && this->C != 0) free(this->data);
+    }
 };
 
 SDVector operator * (const SDVector &a, const SDMatrix &B) {

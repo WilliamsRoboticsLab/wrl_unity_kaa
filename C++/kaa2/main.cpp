@@ -14,8 +14,9 @@ int IK_MAX_LINE_SEARCH_STEPS = 8;
 
 #include "include.cpp"
 
-bool KAA_CPP_INIT_FLAG_TO_MAKE_DRAGON_DRIVING = true;
+bool KAA_CPP_INIT_FLAG_TO_MAKE_DRAGON_DRIVING = false;
 bool USE_FRANCESCO_STL_INSTEAD = true;
+boolean MESH_9_12_TOGGLE = false;
 
 
 
@@ -77,6 +78,9 @@ FILE *dll_agnostic_fopen(char *filename, char *mode) {
     char path[256];
     dll_agnostic_path(path, _COUNT_OF(path), filename);
     FILE *result = fopen(path, mode);
+    #ifdef JIM_DLL
+    if (!result) printf(filename);
+    #endif
     ASSERT(result);
     return result;
 }
@@ -87,7 +91,6 @@ bool _DRAGON_DRIVING__SET_IN_CPP_INIT;
 IndexedTriangleMesh3D dragon; // FORNOW
 real dragonAnimationTime;
 
-boolean MESH_9_12_TOGGLE = false;
 int _9_12() { return (!MESH_9_12_TOGGLE) ? 9 : 12; }
 int _10_13() { return _9_12() + 1; }
 
@@ -604,10 +607,10 @@ delegate void cpp_init(bool _DRAGON_DRIVING = false) {
                         _dragonBody.bone_weights[vertex_i][0],
                     };
 
-                    do_once { printf("[FORNOW]"); };
-                    // ASSERT(_dragonBody.bone_weights[vertex_i][0] >= _dragonBody.bone_weights[vertex_i][1]);
-                    // ASSERT(_dragonBody.bone_weights[vertex_i][1] >= _dragonBody.bone_weights[vertex_i][2]);
-                    // ASSERT(_dragonBody.bone_weights[vertex_i][2] >= _dragonBody.bone_weights[vertex_i][3]);
+                    // do_once { printf("[FORNOW]"); };
+                    ASSERT(_dragonBody.bone_weights[vertex_i][0] >= _dragonBody.bone_weights[vertex_i][1]);
+                    ASSERT(_dragonBody.bone_weights[vertex_i][1] >= _dragonBody.bone_weights[vertex_i][2]);
+                    ASSERT(_dragonBody.bone_weights[vertex_i][2] >= _dragonBody.bone_weights[vertex_i][3]);
                 }
             }
             { // head

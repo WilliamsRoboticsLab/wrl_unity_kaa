@@ -309,7 +309,6 @@ unsafe public class Main : MonoBehaviour {
     Rigidbody[] widgetTargetRigidbodies;
     GameObject[] widgetFeaturePointGameObjects;
     GameObject[] widgetLineGameObjects;
-    LineRenderer[] widgetLineRenderers;
     NativeArray<int> _widgetTargetEnabled;
     NativeArray<float3> _widgetTargetPositions;
     NativeArray<float3> _widgetFeaturePointPositions; 
@@ -342,14 +341,10 @@ unsafe public class Main : MonoBehaviour {
             }
         }
         widgetLineGameObjects = new GameObject[widgetMaximumNumberOfActiveWidgets];
-        widgetLineRenderers = new LineRenderer[widgetMaximumNumberOfActiveWidgets];
         {
-            GameObject prefabLine = PREFAB_LOAD("prefabLine");
+            GameObject prefab3DLine = PREFAB_LOAD("prefab3DLine");
             for (int i = 0; i < widgetMaximumNumberOfActiveWidgets; ++i) {
-                widgetLineGameObjects[i] = PREFAB_INSTANTIATE(prefabLine, "line " + i, widgetWidgetGameObjects[i]);
-                widgetLineRenderers[i] = widgetLineGameObjects[i].GetComponent<LineRenderer>();
-                widgetLineRenderers[i].startColor = new Color(0.0f, 1.0f, 1.0f, 0.66f);
-                widgetLineRenderers[i].endColor = new Color(1.0f, 0.6f, 0.0f, 0.66f);
+                widgetLineGameObjects[i] = PREFAB_INSTANTIATE(prefab3DLine, "line " + i, widgetWidgetGameObjects[i]);
             }
 
         }
@@ -375,11 +370,18 @@ unsafe public class Main : MonoBehaviour {
         for (int i = 0; i < widgetMaximumNumberOfActiveWidgets; ++i) {
             Vector3 a = widgetFeaturePointGameObjects[i].transform.position;
             Vector3 b = widgetTargetGameObjects[i].transform.position;
-            Vector3 o = mainCamera.gameObject.transform.position;
-            widgetLineRenderers[i].SetPosition(0, a);
-            widgetLineRenderers[i].SetPosition(1, b);
-            widgetLineRenderers[i].startWidth = 0.0166f / 2f + Vector3.Distance(o, a) / 33.0f;
-            widgetLineRenderers[i].endWidth   = 0.0333f / 2f + Vector3.Distance(o, b) / 33.0f;
+            // Vector3 o = mainCamera.gameObject.transform.position;
+            // widgetLineRenderers[i].SetPosition(0, a);
+            // widgetLineRenderers[i].SetPosition(1, b);
+            // widgetLineRenderers[i].startWidth = 0.0166f / 2f + Vector3.Distance(o, a) / 33.0f;
+            // widgetLineRenderers[i].endWidth   = 0.0333f / 2f + Vector3.Distance(o, b) / 33.0f;
+            Vector3 position = (a + b) / 2.0f;
+            widgetLineGameObjects[i].transform.position = position;
+            widgetLineGameObjects[i].transform.LookAt(b);
+            widgetLineGameObjects[i].transform.eulerAngles -= new Vector3(90.0f, 0.0f, 0.0f);
+            Vector3 localScale = widgetLineGameObjects[i].transform.localScale;
+            localScale.y = (b - a).magnitude / 2.0f;
+            widgetLineGameObjects[i].transform.localScale = localScale;
         }
     }
 
@@ -698,8 +700,8 @@ unsafe public class Main : MonoBehaviour {
                     WidgetDeactivate(specialInputRightRayHotTargetIndex);
                 }
             } else {
-                if (specialInputLeftRayEnteredTarget ) { UnityEngine.XR.InputDevices.GetDeviceAtXRNode(UnityEngine.XR.XRNode. LeftHand).SendHapticImpulse(0, 0.3f, 0.15f); }
-                if (specialInputRightRayEnteredTarget) { UnityEngine.XR.InputDevices.GetDeviceAtXRNode(UnityEngine.XR.XRNode.RightHand).SendHapticImpulse(0, 0.3f, 0.15f); }
+                if (!inputHeldLeftGrip && specialInputLeftRayEnteredTarget ) { UnityEngine.XR.InputDevices.GetDeviceAtXRNode(UnityEngine.XR.XRNode. LeftHand).SendHapticImpulse(0, 0.3f, 0.15f); }
+                if (!inputHeldRightGrip && specialInputRightRayEnteredTarget) { UnityEngine.XR.InputDevices.GetDeviceAtXRNode(UnityEngine.XR.XRNode.RightHand).SendHapticImpulse(0, 0.3f, 0.15f); }
             }
         }
 
@@ -864,7 +866,7 @@ unsafe public class Main : MonoBehaviour {
                 UpdateCylinderForString(cable_positionsV3[viaIndex], cable_positionsV3[viaIndex+1], cables[cableIndex][substringIndex]);
                 for(int objectIndex = 0; objectIndex < 3; objectIndex++){
                     Material mat = cables[cableIndex][substringIndex][objectIndex].GetComponent<MeshRenderer>().material;
-                    Color color = ColorPlasma(0.3f + 15.0f * tensions[cableIndex]); 
+                    Color color = ColorPlasma(0.3f + 7.0f * tensions[cableIndex]); 
                     mat.color = color;
                     mat.SetColor("_EmissionColor", color);
                 }
@@ -877,8 +879,7 @@ unsafe public class Main : MonoBehaviour {
     void UpdateCylinderForString(Vector3 startPoint, Vector3 endPoint, GameObject[] cylinderAndCaps){
         cylinderAndCaps[0].transform.position = startPoint;
         cylinderAndCaps[1].transform.position =   endPoint;
-        Vector3 offset = endPoint - startPoint;
-        Vector3 position = startPoint + (offset/2.0f);
+        Vector3 position = (startPoint + endPoint) / 2.0f;
         cylinderAndCaps[2].transform.position = position;
         cylinderAndCaps[2].transform.LookAt(endPoint);
         cylinderAndCaps[2].transform.eulerAngles -= new Vector3(90.0f, 0.0f, 0.0f);

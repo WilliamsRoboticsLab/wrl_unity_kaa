@@ -1,6 +1,11 @@
 // TODO: unity_config.txt (circle test)
 // TODO: dump u as well
 
+
+// TODO: fit young's modulus and poissons
+// TODO: try 12 vs 9
+
+
 const int  MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_UPPER_SEGMENT = 3;
 const int  MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_LOWER_SEGMENT = 2;
 const bool  INCLUDE_DUMMY_SEGMENT                             = false; // FORNOW: bottom segment always 1 stack
@@ -74,6 +79,10 @@ FILE *dll_asserted_agnostic_fopen(char *filename, char *mode) {
 
 IndexedTriangleMesh3D dragonBody; // FORNOW
 
+boolean MESH_9_12_TOGGLE = false;
+int _9_12() { return (!MESH_9_12_TOGGLE) ? 9 : 12; }
+int _10_13() { return _9_12() + 1; }
+
 const real ROBOT_SEGMENT_LENGTH = 0.1450;
 const real ROBOT_SEGMENT_RADIUS = 0.06 / 2;
 const int  ROBOT_NUMBER_OF_UPPER_SEGMENTS = 1;
@@ -82,7 +91,7 @@ const int  ROBOT_NUMBER_OF_SEGMENTS = ROBOT_NUMBER_OF_UPPER_SEGMENTS + ROBOT_NUM
 const real ROBOT_LENGTH = ROBOT_NUMBER_OF_SEGMENTS * ROBOT_SEGMENT_LENGTH;
 const real MESH_UPPER_STACK_LENGTH = ROBOT_SEGMENT_LENGTH / MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_UPPER_SEGMENT;
 const real MESH_LOWER_STACK_LENGTH = ROBOT_SEGMENT_LENGTH / MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_LOWER_SEGMENT;
-const int  MESH_NUMBER_OF_ANGULAR_SECTIONS = 9;
+const int  MESH_NUMBER_OF_ANGULAR_SECTIONS = (!MESH_9_12_TOGGLE) ? 9 : 12;
 const int  MESH_NUMBER_OF_NODES_PER_NODE_LAYER = 1 + MESH_NUMBER_OF_ANGULAR_SECTIONS;
 const int  _MESH_NUMBER_OF_UPPER_NODE_LAYERS_EXCLUSIVE = ROBOT_NUMBER_OF_UPPER_SEGMENTS * MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_UPPER_SEGMENT;
 const int  _MESH_NUMBER_OF_LOWER_NODE_LAYERS_EXCLUSIVE = ROBOT_NUMBER_OF_LOWER_SEGMENTS * MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_LOWER_SEGMENT;
@@ -127,7 +136,7 @@ FixedSizeSelfDestructingArray<vec3> getBoneOrigins(SDVector &x) {
     FixedSizeSelfDestructingArray<vec3> result(DRAGON_NUM_BONES + 1);
     for_(j, result.N) {
         if (j != result.N - 1) {
-            result[j] = get(x, 9 + j * 10);
+            result[j] = get(x, _9_12() + j * (_10_13()));
         } else {
             result[j] = get(x, sim.num_nodes - 1);
         }
@@ -302,7 +311,7 @@ void cpp_unity_config_load() {
     int lineNumber = 0;
     char line[4096];
     while (fgets(line, _COUNT_OF(line), file) != NULL) {
-        double tmp;
+        real tmp;
         if (lineNumber == 0) {
             sscanf(line, "%d", &unity_config.AUTO_TEST);
         } else if (lineNumber == 1) {
@@ -380,7 +389,7 @@ delegate void cpp_init(bool _DRAGON_DRIVING = false) {
                 for_(a, MESH_NUMBER_OF_ANGULAR_SECTIONS) {
                     // real angularWidth = RAD(((a % 3) == 2) ? 60 : 30);
                     sbuff_push_back(&X, V3(ROBOT_SEGMENT_RADIUS * cos(angle), -length, -ROBOT_SEGMENT_RADIUS * sin(angle)));
-                    angle += RAD(((a % 3) == 2) ? 60 : 30);
+                    angle += (!MESH_9_12_TOGGLE) ? (RAD(((a % 3) == 2) ? 60 : 30)) : RAD(30);
                 }
                 sbuff_push_back(&X, V3(0.0, -length, 0.0));
                 if (i == MESH_NUMBER_OF_NODE_LAYERS - 1) ASSERT(ARE_EQUAL(length, ROBOT_LENGTH));
@@ -437,9 +446,7 @@ delegate void cpp_init(bool _DRAGON_DRIVING = false) {
         StretchyBuffer<Via> vias = {};
         {
             for_(cable_group, 3) {
-
                 for_(d, 3) {
-
                     int cable_num_vias = (cable_group == 0) ?
                         (1 + MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_UPPER_SEGMENT) :
                         (1 + 2 * MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_LOWER_SEGMENT);
@@ -447,7 +454,8 @@ delegate void cpp_init(bool _DRAGON_DRIVING = false) {
                     sbuff_push_back(&num_vias, cable_num_vias);
 
                     int i_0; {
-                        i_0 = cable_group + 3 * d;
+                        
+                        i_0 = cable_group + ((!MESH_9_12_TOGGLE) ? 3 : 4) * d;
                         if (cable_group >= 1) i_0 +=     (MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_UPPER_SEGMENT * MESH_NUMBER_OF_NODES_PER_NODE_LAYER);
                         if (cable_group >= 2) i_0 += 2 * (MESH_NUMBER_OF_VOLUMETRIC_STACKS_PER_LOWER_SEGMENT * MESH_NUMBER_OF_NODES_PER_NODE_LAYER);
                     }
@@ -665,8 +673,8 @@ delegate void cpp_solve(
                                             }
                                             { // X FORNOW SO HACKY
                                                 for_(bone_i, DRAGON_NUM_BONES + 1) {
-                                                    sbuff_push_back(&X_node_indices, 9 + bone_i * 10);
-                                                    sbuff_push_back(&X_node_indices, 0 + bone_i * 10);
+                                                    sbuff_push_back(&X_node_indices, _9_12() + bone_i * _10_13());
+                                                    sbuff_push_back(&X_node_indices, 0 + bone_i * _10_13());
                                                 }
                                             }
                                         }
@@ -1030,12 +1038,95 @@ delegate void cpp_getCables(
 }
 ////////////////////////////////////////////////////////////////////////////////
 
+void jones() {
+    cpp_init();
+
+    Camera3D camera = {};
+    camera.persp_distance_to_origin =  1.0;
+    camera.angle_of_view = RAD(0);
+    camera.theta = RAD(0);
+    camera.phi = RAD(-90);
+
+    StretchyBuffer<real> u_buffer = {}; { // FORNOW
+        FILE *file = fopen("CircleU.csv", "r");
+        ASSERT(file);
+        char line[4096];
+        real u[9];
+        while (fgets(line, _COUNT_OF(line), file) != NULL) {
+            sscanf(line, "%lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf", &u[0], &u[1], &u[2], &u[3], &u[4], &u[5], &u[6], &u[7], &u[8]);
+            for_(j, 9) sbuff_push_back(&u_buffer, u[j]);
+        }
+        fclose(file);
+    }
+
+    StretchyBuffer<vec3> mocap_buffer = {}; {
+        FILE *file = fopen("CircleTip.csv", "r");
+        ASSERT(file);
+        char line[4096];
+        vec3 tip;
+        while (fgets(line, _COUNT_OF(line), file) != NULL) {
+            sscanf(line, "%lf, %lf, %lf", &tip[0], &tip[1], &tip[2]);
+            tip -= V3(-699.702209, 1050.0,  -493.657928);
+            tip = transformPoint(M4_RotationAboutYAxis(RAD(180)), tip);
+            tip *= .001;
+            sbuff_push_back(&mocap_buffer, tip);
+        }
+        fclose(file);
+    }
+
+    #define TRACE_QUEUE_LENGTH 512
+    vec3 trace[TRACE_QUEUE_LENGTH] = {};
+
+    int frame = 0;
+    int frame_number_of_frames = u_buffer.length / 9;
+    int frame_jump = 5;
+
+    tetMassDensity = 1300.0;
+    tetYoungsModulus = 800000.0;
+
+    while (cow_begin_frame()) {
+
+        // camera_attach_to_gui(&camera);
+        camera_move(&camera);
+        mat4 P = camera_get_P(&camera);
+        mat4 V = camera_get_V(&camera);
+        mat4 PV = P * V;
+
+        gui_printf("MESH_9_12_TOGGLE %d", MESH_9_12_TOGGLE);
+        gui_slider("tetMassDensity", &tetMassDensity, 0.0, 5000.0);
+        gui_slider("tetYoungsModulus", &tetYoungsModulus, 2.0, 8.0, false, true);
+        gui_slider("tetPoissonsRatio", &tetPoissonsRatio, 0.45, 0.49);
+        gui_slider("frame_jump", &frame_jump, 1, 10, 'j', 'k');
+
+        memcpy(currentState.u.data, u_buffer.data + 9 * frame, 9 * sizeof(real));
+        frame = (frame + frame_jump) % frame_number_of_frames;
+        currentState = sim.getNext(&currentState);
+
+        { // update trace
+            for (int i = TRACE_QUEUE_LENGTH - 1; i > 0; --i) trace[i] = trace[i - 1];
+            trace[0] = get(currentState.x, sim.num_nodes - 1);
+        }
+
+        { // draw
+            eso_begin(PV, SOUP_LINE_STRIP);
+            for_(i, MIN(frame, TRACE_QUEUE_LENGTH)) {
+                eso_color(color_plasma(NUM_DENm1(i, TRACE_QUEUE_LENGTH)));
+                eso_vertex(trace[i]);
+            }
+            eso_end();
+            sim.draw(P, V, M4_Identity(), &currentState);
+
+            soup_draw(PV, SOUP_LINE_STRIP, mocap_buffer.length, mocap_buffer.data, NULL, monokai.blue);
+        }
+    }
+}
+
 
 void main() {
     omp_set_num_threads(6);
     APPS {
-        // APP(jones);
-        APP(kaa);
+        APP(jones);
+        // APP(kaa);
         // APP(eg_fbo);
     }
 }
@@ -1157,11 +1248,11 @@ void jones() {
     static vec3 generated_positions[JOSIE_NUM_CABLE_POSITIONS+1];
 
     //Reading in the rigidbody position file
-    FILE *fp = fopen("rigidbodydata.csv", "r");
-    ASSERT(fp);
+    FILE *file = fopen("rigidbodydata.csv", "r");
+    ASSERT(file);
     char data_buffer[4096];
     int count = 0;
-    while (fgets(data_buffer, _COUNT_OF(data_buffer), fp) != NULL) {
+    while (fgets(data_buffer, _COUNT_OF(data_buffer), file) != NULL) {
         sscanf(data_buffer, "%lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf",
                 &rigidbodies[0][count].x, &rigidbodies[0][count].y, &rigidbodies[0][count].z, &rigidbodies[1][count].x, &rigidbodies[1][count].y, &rigidbodies[1][count].z,
                 &rigidbodies[2][count].x, &rigidbodies[2][count].y, &rigidbodies[2][count].z, &rigidbodies[3][count].x, &rigidbodies[3][count].y, &rigidbodies[3][count].z,
@@ -1172,14 +1263,14 @@ void jones() {
         }
         count++;
     }
-    fclose(fp);
+    fclose(file);
 
     //Reading in the marker position file
-    fp = fopen("markerdata.csv", "r");
-    ASSERT(fp);
+    file = fopen("markerdata.csv", "r");
+    ASSERT(file);
     char* token;
     count = 0;
-    while (fgets(data_buffer, _COUNT_OF(data_buffer), fp) != NULL) {
+    while (fgets(data_buffer, _COUNT_OF(data_buffer), file) != NULL) {
         int index = 0;
         token = strtok(data_buffer, ",");
         while(token != NULL) {
@@ -1189,7 +1280,7 @@ void jones() {
         }
         count++;
     }
-    fclose(fp);
+    fclose(file);
 
 
     vec3 x = rigidbodies[0][0];
@@ -1202,10 +1293,10 @@ void jones() {
         }
     }
 
-    fp = fopen("tendonlengthdata.csv", "r");
-    ASSERT(fp);
+    file = fopen("tendonlengthdata.csv", "r");
+    ASSERT(file);
     count = 0;
-    while (fgets(data_buffer, _COUNT_OF(data_buffer), fp) != NULL) {
+    while (fgets(data_buffer, _COUNT_OF(data_buffer), file) != NULL) {
         sscanf(data_buffer, "%lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf, %lf",
                 &tendonlengths[0][count], &tendonlengths[1][count], &tendonlengths[2][count], 
                 &tendonlengths[3][count], &tendonlengths[4][count], &tendonlengths[5][count], 
@@ -1215,7 +1306,7 @@ void jones() {
         }
         count++;
     }
-    fclose(fp);
+    fclose(file);
 
     int time_start              = 0;
     int time_end                = JOSIE_NUM_FRAMES - 1;

@@ -617,14 +617,14 @@ unsafe public class Main : MonoBehaviour {
             return;
         }
 
-        if (Input.GetKeyDown(KeyCode.A)) {
+        if (Input.GetKeyDown(KeyCode.A) || Input.GetKeyDown(KeyCode.F)) {
             mainCamera.enabled = !mainCamera.enabled;
             figureCamera.enabled = !figureCamera.enabled;
         }
-        if (Input.GetKeyDown(KeyCode.B)) {
+        if (Input.GetKeyDown(KeyCode.B) || Input.GetKeyDown(KeyCode.F)) {
             GAME_OBJECT_SET_WHETHER_DRAWING(boxGameObject, !GAME_OBJECT_IS_DRAWING(boxGameObject));
         }
-        if (Input.GetKeyDown(KeyCode.C)) {
+        if (Input.GetKeyDown(KeyCode.C) || Input.GetKeyDown(KeyCode.F)) {
             GAME_OBJECT_SET_WHETHER_DRAWING(balloonParentObject, !GAME_OBJECT_IS_DRAWING(balloonParentObject));
         }
 

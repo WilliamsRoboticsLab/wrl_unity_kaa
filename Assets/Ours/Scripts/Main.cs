@@ -433,7 +433,7 @@ unsafe public class Main : MonoBehaviour {
     IntPtr library;
     delegate void cpp_send2motors();
     delegate void cpp_exit();
-    delegate void cpp_init(bool SHOW_DRAGON = false); // TODO
+    delegate void cpp_init(bool _DRAGON_DRIVING = false); // TODO
     delegate int cpp_getNumVertices();
     delegate int cpp_getNumTriangles();
     delegate void cpp_reset();
@@ -670,8 +670,8 @@ unsafe public class Main : MonoBehaviour {
 
         cameraOffset = GameObject.Find("CameraOffset");
 
-        // init(true);
-        init(false);
+        init(true);
+        // init(false);
 
         WidgetAwake();
 

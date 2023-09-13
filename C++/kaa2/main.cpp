@@ -14,7 +14,7 @@ int IK_MAX_LINE_SEARCH_STEPS = 8;
 
 #include "include.cpp"
 
-bool KAA_CPP_INIT_FLAG_TO_MAKE_DRAGON_DRIVING = false;
+bool KAA_CPP_INIT_FLAG_TO_MAKE_DRAGON_DRIVING = true;
 bool USE_FRANCESCO_STL_INSTEAD = false;
 boolean MESH_9_12_TOGGLE = false;
 
@@ -85,6 +85,14 @@ FILE *dll_agnostic_fopen(char *filename, char *mode) {
     return result;
 }
 
+#ifdef JIM_DLL
+int _ZZZ(int d) {
+    // unity is left-handed
+    return (d == 2) ? -1 : 1;
+}
+#else
+int _ZZZ(int) { return 1; }
+#endif
 
 bool _DRAGON_SHOW;
 bool _DRAGON_DRIVING__SET_IN_CPP_INIT;
@@ -180,8 +188,17 @@ Bones getBones(SDVector &x) {
                 vec3 y_hat = -bodyBoneNegativeYAxis[bone_i];
                 vec3 x_hat = bodyBonePositiveXAxis[bone_i];
                 vec3 z_hat = cross(x_hat, y_hat);
-                mat4 invBind = M4_Translation(-bodyBoneOriginsRest[bone_i]);
-                mat4 Bone = M4_xyzo(x_hat, y_hat, z_hat, bodyBoneOrigins[bone_i]);
+                vec3 o_rest = bodyBoneOriginsRest[bone_i];
+                vec3 o = bodyBoneOrigins[bone_i];
+                { // FORNOW
+                    x_hat.z *= _ZZZ(2);
+                    y_hat.z *= _ZZZ(2);
+                    z_hat.z *= _ZZZ(2);
+                    o_rest.z *= _ZZZ(2);
+                    o.z *= _ZZZ(2);
+                }
+                mat4 invBind = M4_Translation(-o_rest);
+                mat4 Bone = M4_xyzo(x_hat, y_hat, z_hat, o);
                 result[bone_i] = Bone * invBind;
             }
         }
@@ -194,11 +211,17 @@ Bones getBones(SDVector &x) {
         vec3 x_hat = cross(y_hat, up);
         x_hat = IS_ZERO(squaredNorm(x_hat)) ? V3(1.0, 0.0, 0.0) : normalized(x_hat);
         vec3 z_hat = cross(x_hat, y_hat);
-        mat4 M = M4_xyzo(x_hat, y_hat, z_hat, bodyBoneOrigins[DRAGON_BODY_NUM_BONES - 1]);
+        vec3 o = bodyBoneOrigins[DRAGON_BODY_NUM_BONES - 1];
+        { // FORNOW
+            x_hat.z *= _ZZZ(2);
+            y_hat.z *= _ZZZ(2);
+            z_hat.z *= _ZZZ(2);
+            o.z *= _ZZZ(2);
+        }
+        mat4 M = M4_xyzo(x_hat, y_hat, z_hat, o);
         result[DRAGON_BODY_NUM_BONES] = M
             * M4_RotationAboutYAxis(0.2 * sin(4.0 * dragonAnimationTime))
             * M4_RotationAboutXAxis(0.2 * sin(2.0 * dragonAnimationTime));
-
     }
     return result;
 }
@@ -224,14 +247,6 @@ vec3 skinnedGet(IndexedTriangleMesh3D *mesh, const Bones &bones, int i) {
 }
 
 
-#ifdef JIM_DLL
-int _ZZZ(int d) {
-    // unity is left-handed
-    return (d == 2) ? -1 : 1;
-}
-#else
-int _ZZZ(int) { return 1; }
-#endif
 
 
 
@@ -431,7 +446,7 @@ delegate void cpp_reset() {
     currentState.u.setZero();
     currentBones = getBones(currentState.x);
 }
-delegate void cpp_init(bool _DRAGON_DRIVING = false) {
+delegate void cpp_init(bool _DRAGON_DRIVING = false) { // TODO: take int
     cpp_unity_config_load();
     {
         char path[256];

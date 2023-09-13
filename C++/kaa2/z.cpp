@@ -282,66 +282,9 @@ void jones() {
 
 //END CARL
 
-delegate void cpp_dragon_yzoHead (
-        void *bones_y,
-        void *bones_z,
-        void *bones_o) {
-
-    vec3 y = -normalized(get(currentState.x, 9 + (NUM_BONES) * 10) - get(currentState.x, 9 + (NUM_BONES - 1) * 10));
-    vec3 up = { 0.0, 1.0, 0.0 }; 
-    vec3 x = normalized(cross(y, up));
-    vec3 z = cross(x, y);
-    vec3 o = get(currentState.x, 9 + (NUM_BONES) * 10);
-
-    float y_floats[3] = {(float)(y.x), (float)(y.y), (float)(y.z)};
-    float z_floats[3] = {(float)(z.x), (float)(z.y), (float)(z.z)};
-    float o_floats[3] = {(float)(o.x), (float)(o.y), (float)(o.z)};
-
-    for_(i, 3) {
-        ((float *) bones_y)[i] = y_floats[i];
-        ((float *) bones_z)[i] = z_floats[i];
-        ((float *) bones_o)[i] = o_floats[i];
-    }
-}
 
 
-delegate UnityGeneralPurposeInt cpp_dragon_getNumVertices(UnityGeneralPurposeInt mesh_index) {
-    IndexedTriangleMesh3D mesh = mesh_index ? dragonBody : _dragonHead;
-    return mesh.num_vertices;
-}
 
-delegate UnityGeneralPurposeInt cpp_dragon_getNumTriangles(UnityGeneralPurposeInt mesh_index) {
-    IndexedTriangleMesh3D mesh = mesh_index ? dragonBody : _dragonHead;
-    return mesh.num_triangles;
-}
-
-delegate UnityGeneralPurposeInt cpp_dragon_getNumBones() { return NUM_BONES; }
-
-delegate void cpp_dragon_getMesh (
-        UnityGeneralPurposeInt mesh_index,
-        void *vertex_positions,
-        void *vertex_normals,
-        void *vertex_colors,
-        void *triangle_indices) {
-
-    IndexedTriangleMesh3D mesh = mesh_index ? dragonBody : _dragonHead;
-
-    for (int k = 0; k < cpp_dragon_getNumVertices(mesh_index); k++) {
-        for_(d, 3) {
-            ((UnityVertexAttributeFloat*) vertex_positions)[3 * k + d] = (UnityVertexAttributeFloat)(mesh.vertex_positions[k][d]);
-            ((UnityVertexAttributeFloat*)   vertex_normals)[3 * k + d] = (UnityVertexAttributeFloat)(mesh.vertex_normals  [k][d]);
-        }
-        for_(d, 4) {
-            ((UnityVertexAttributeFloat*) vertex_colors)[4 * k + d] = (d == 3) ? (UnityVertexAttributeFloat)(1.0)
-                : (UnityVertexAttributeFloat)(mesh.vertex_colors[k][d]);
-        }
-    }
-    for (int k = 0; k < cpp_dragon_getNumTriangles(mesh_index); k++) {
-        for_(d, 3) {
-            ((UnityTriangleIndexInt*) triangle_indices)[3 * k + d] = (UnityTriangleIndexInt)(mesh.triangle_indices[k][d]);
-        }
-    }
-}
 // TODO: GPU picking
 // TODO: make line and spheres show up through the transparent mesh as well
 // TODO: see if you can run cow while running an app in VR
@@ -387,31 +330,6 @@ delegate void cpp_dragon_getMesh (
 
 IndexedTriangleMesh3D _dragonHead;
 IndexedTriangleMesh3D dragonBody;
-delegate void cpp_dragon_initializeBones (
-        void *bones_y,
-        void *bones_z,
-        void *bones_o,
-        void *bone_indices,
-        void *bone_weights) {
-
-    ASSERT(initialized);
-
-    // TODO: this shouldn't be here
-    for(int i = 0; i < NUM_BONES; i++) {
-        for_(d, 3) {
-            ((UnityVertexAttributeFloat*) bones_y)[3 * i + d] = (UnityVertexAttributeFloat)(currentBones[i](d, 1));
-            ((UnityVertexAttributeFloat*) bones_z)[3 * i + d] = (UnityVertexAttributeFloat)(currentBones[i](d, 2));
-            ((UnityVertexAttributeFloat*) bones_o)[3 * i + d] = (UnityVertexAttributeFloat)(currentBones[i](d, 3));
-        }
-    }
-
-    for(int i = 0; i < dragonBody.num_vertices; i++) {
-        for_(j, 4) {
-            ((UnityGeneralPurposeInt*)    bone_indices)[4 * i + j] = (UnityGeneralPurposeInt)(   dragonBody.bone_indices[i][j]);
-            ((UnityVertexAttributeFloat*) bone_weights)[4 * i + j] = (UnityVertexAttributeFloat)(dragonBody.bone_weights[i][j]);
-        }
-    }
-}
 
 if (0) { // set up skinned mesh
     { //CARL load meshes
@@ -503,17 +421,4 @@ else { // skinning
     }
 }
 
-delegate void cpp_dragon_yzoBones(
-        void *bones_y,
-        void *bones_z,
-        void *bones_o) {
-
-    for(int i = 0; i < NUM_BONES; i++) {
-        for_(d, 3) {
-            ((UnityVertexAttributeFloat*) bones_y)[3 * i + d] = (UnityVertexAttributeFloat)(currentBones[i](d, 1));
-            ((UnityVertexAttributeFloat*) bones_z)[3 * i + d] = (UnityVertexAttributeFloat)(currentBones[i](d, 2));
-            ((UnityVertexAttributeFloat*) bones_o)[3 * i + d] = (UnityVertexAttributeFloat)(currentBones[i](d, 3));
-        }
-    }
-}
 #endif

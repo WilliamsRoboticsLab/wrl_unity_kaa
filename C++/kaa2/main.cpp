@@ -328,6 +328,52 @@ delegate void cpp_getBalloonPositions(void *balloons__FLOAT3_ARRAY) {
 }
 
 
+
+
+
+delegate UnityGeneralPurposeInt cpp_dragon_getNumVertices() { return dragon.num_vertices; }
+delegate UnityGeneralPurposeInt cpp_dragon_getNumTriangles() { return dragon.num_triangles; }
+delegate UnityGeneralPurposeInt cpp_dragon_getNumBones() { return dragon.num_bones; }
+delegate void cpp_dragon_initializeMesh (void *vertex_positions, void *vertex_normals, void *vertex_colors, void *triangle_indices) {
+    for_(k, dragon.num_vertices) {
+        for_(d, 3) {
+            ((UnityVertexAttributeFloat*) vertex_positions)[3 * k + d] = (UnityVertexAttributeFloat)(_ZZZ(d) * dragon.vertex_positions[k][d]);
+            ((UnityVertexAttributeFloat*)   vertex_normals)[3 * k + d] = (UnityVertexAttributeFloat)(_ZZZ(d) * dragon.vertex_normals  [k][d]);
+        }
+        for_(d, 4) {
+            ((UnityVertexAttributeFloat*) vertex_colors)[4 * k + d] = (d == 3) ? (UnityVertexAttributeFloat)(1.0)
+                : (UnityVertexAttributeFloat)(dragon.vertex_colors[k][d]);
+        }
+    }
+    for_(k, dragon.num_triangles) {
+        for_(d, 3) {
+            ((UnityTriangleIndexInt*) triangle_indices)[3 * k + d] = (UnityTriangleIndexInt)(dragon.triangle_indices[k][d]);
+        }
+    }
+}
+delegate void cpp_dragon_initializeBones(void *bone_indices, void *bone_weights) {
+    ASSERT(initialized);
+    for_(i, dragon.num_vertices) {
+        for_(j, 4) {
+            ((UnityGeneralPurposeInt*)    bone_indices)[4 * i + j] = (UnityGeneralPurposeInt)(   dragon.bone_indices[i][j]);
+            ((UnityVertexAttributeFloat*) bone_weights)[4 * i + j] = (UnityVertexAttributeFloat)(dragon.bone_weights[i][j]);
+        }
+    }
+}
+delegate void cpp_dragon_updateBones(void *bones_y, void *bones_z, void *bones_o) {
+    for_(i, dragon.num_bones) {
+        for_(d, 3) {
+            ((UnityVertexAttributeFloat*) bones_y)[3 * i + d] = (UnityVertexAttributeFloat)(_ZZZ(d) * currentBones[i](d, 1));
+            ((UnityVertexAttributeFloat*) bones_z)[3 * i + d] = (UnityVertexAttributeFloat)(_ZZZ(d) * currentBones[i](d, 2));
+            ((UnityVertexAttributeFloat*) bones_o)[3 * i + d] = (UnityVertexAttributeFloat)(_ZZZ(d) * currentBones[i](d, 3));
+        }
+    }
+}
+
+
+
+
+
 struct {
     int AUTO_TEST;
     float CircleY;

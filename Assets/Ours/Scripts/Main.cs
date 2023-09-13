@@ -466,6 +466,12 @@ unsafe public class Main : MonoBehaviour {
     delegate int cpp_getAUTO_TEST();
     delegate float cpp_getCircleY();
     delegate float cpp_getCircleRadius();
+    delegate int cpp_dragon_getNumVertices();
+    delegate int cpp_dragon_getNumTriangles();
+    delegate int cpp_dragon_getNumBones();
+    delegate void cpp_dragon_initializeMesh(void *vertex_positions, void *vertex_normals, void *vertex_colors, void *triangle_indices);
+    delegate void cpp_dragon_initializeBones(void *bone_indices, void *bone_weights);
+    delegate void cpp_dragon_updateBones(void *bones_y, void *bones_z, void *bones_o);
 
 
     cpp_send2motors        send2motors;
@@ -484,6 +490,12 @@ unsafe public class Main : MonoBehaviour {
     cpp_getAUTO_TEST getAUTO_TEST;
     cpp_getCircleY getCircleY;
     cpp_getCircleRadius getCircleRadius;
+    cpp_dragon_getNumVertices dragon_getNumVertices;
+    cpp_dragon_getNumTriangles dragon_getNumTriangles;
+    cpp_dragon_getNumBones dragon_getNumBones;
+    cpp_dragon_initializeMesh dragon_initializeMesh;
+    cpp_dragon_initializeBones dragon_initializeBones;
+    cpp_dragon_updateBones dragon_updateBones;
 
     void DLLAwake() {
         library = LoadLibrary("snake");
@@ -504,6 +516,12 @@ unsafe public class Main : MonoBehaviour {
         getAUTO_TEST = (cpp_getAUTO_TEST) Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_getAUTO_TEST"), typeof(cpp_getAUTO_TEST));
         getCircleY = (cpp_getCircleY) Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_getCircleY"), typeof(cpp_getCircleY));
         getCircleRadius = (cpp_getCircleRadius) Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_getCircleRadius"), typeof(cpp_getCircleRadius));
+        dragon_getNumVertices = (cpp_dragon_getNumVertices) Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_dragon_getNumVertices"), typeof(cpp_dragon_getNumVertices));
+        dragon_getNumTriangles = (cpp_dragon_getNumTriangles) Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_dragon_getNumTriangles"), typeof(cpp_dragon_getNumTriangles));
+        dragon_getNumBones = (cpp_dragon_getNumBones) Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_dragon_getNumBones"), typeof(cpp_dragon_getNumBones));
+        dragon_initializeMesh = (cpp_dragon_initializeMesh) Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_dragon_initializeMesh"), typeof(cpp_dragon_initializeMesh));
+        dragon_initializeBones = (cpp_dragon_initializeBones) Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_dragon_initializeBones"), typeof(cpp_dragon_initializeBones));
+        dragon_updateBones = (cpp_dragon_updateBones) Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_dragon_updateBones"), typeof(cpp_dragon_updateBones));
     }
 
 
@@ -535,6 +553,113 @@ unsafe public class Main : MonoBehaviour {
 
 
     GameObject cameraOffset;
+
+
+    Transform[] dragonBones;
+    SkinnedMeshRenderer dragonSkinnedMeshRenderer;
+    MeshRenderer dragonNonDragonMeshRenderer;
+    void DragonAwake() {
+        GameObject dragonGameObject = GameObject.Find("Dragon");
+        dragonNonDragonMeshRenderer = gameObject.GetComponent<MeshRenderer>(); // FORNOW
+
+        int triangleIndexCount = dragon_getNumTriangles() * 3; 
+
+        Mesh.MeshDataArray meshDataArray = Mesh.AllocateWritableMeshData(1);
+        Mesh.MeshData meshData = meshDataArray[0];
+        int vertexCount = dragon_getNumVertices();
+
+        var vertexAttributes = new NativeArray<VertexAttributeDescriptor>(3, Allocator.Temp);
+        vertexAttributes[0] = new VertexAttributeDescriptor(dimension: 3);
+        vertexAttributes[1] = new VertexAttributeDescriptor(VertexAttribute.Normal, dimension: 3, stream: 1);
+        vertexAttributes[2] = new VertexAttributeDescriptor(VertexAttribute.Color, dimension:4, stream: 2);
+        meshData.SetVertexBufferParams(vertexCount, vertexAttributes);
+        vertexAttributes.Dispose();
+
+        meshData.SetIndexBufferParams(triangleIndexCount, IndexFormat.UInt32);
+
+        dragon_initializeMesh(
+                NativeArrayUnsafeUtility.GetUnsafePtr(meshData.GetVertexData<float3>(0)),
+                NativeArrayUnsafeUtility.GetUnsafePtr(meshData.GetVertexData<float3>(1)),
+                NativeArrayUnsafeUtility.GetUnsafePtr(meshData.GetVertexData<Color>(2)),
+                NativeArrayUnsafeUtility.GetUnsafePtr(meshData.GetIndexData<int>()));
+
+        meshData.subMeshCount = 1;
+        meshData.SetSubMesh(0, new SubMeshDescriptor(0, triangleIndexCount));
+
+        Mesh mesh = new Mesh { name = "Dragon" };
+
+        Mesh.ApplyAndDisposeWritableMeshData(meshDataArray, mesh);
+        mesh.RecalculateBounds();
+        dragonGameObject.GetComponent<SkinnedMeshRenderer>().sharedMesh = mesh;
+
+        {
+            int numBones = dragon_getNumBones();
+            int num_vertices = dragon_getNumVertices();
+
+            NativeArray<Vector4Int> cpp_bone_indices = new NativeArray<Vector4Int>(num_vertices, Allocator.Temp);
+            NativeArray<Vector4> cpp_bone_weights = new NativeArray<Vector4>(num_vertices, Allocator.Temp);
+
+            dragon_initializeBones(NativeArrayUnsafeUtility.GetUnsafePtr(cpp_bone_indices), NativeArrayUnsafeUtility.GetUnsafePtr(cpp_bone_weights));
+
+            Matrix4x4[] bindPoses = new Matrix4x4[numBones];
+            dragonSkinnedMeshRenderer = dragonGameObject.GetComponent<SkinnedMeshRenderer>();
+            dragonBones = new Transform[numBones];
+            bindPoses = new Matrix4x4[numBones];
+            for (int boneIndex = 0; boneIndex < numBones; boneIndex++) {
+                dragonBones[boneIndex] = new GameObject("Bone " + boneIndex.ToString()).transform;
+                dragonBones[boneIndex].parent = dragonGameObject.transform;
+                dragonBones[boneIndex].localPosition = new Vector3();//bodyBones_o[boneIndex];
+                dragonBones[boneIndex].localRotation = Quaternion.identity; // Quaternion.LookRotation(bodyBones_z[boneIndex], bodyBones_y[boneIndex]);
+                bindPoses[boneIndex] = Matrix4x4.identity;// bones[boneIndex].worldToLocalMatrix * transform.localToWorldMatrix;
+            }
+            dragonSkinnedMeshRenderer.sharedMesh.bindposes = bindPoses;
+            dragonSkinnedMeshRenderer.bones = dragonBones;
+
+            BoneWeight[] bone_weights = new BoneWeight[num_vertices];
+            for (int i = 0; i < num_vertices; i++) {
+                bone_weights[i].boneIndex0 = cpp_bone_indices[i][0];
+                bone_weights[i].boneIndex1 = cpp_bone_indices[i][1];
+                bone_weights[i].boneIndex2 = cpp_bone_indices[i][2];
+                bone_weights[i].boneIndex3 = cpp_bone_indices[i][3];
+                bone_weights[i].weight0 = cpp_bone_weights[i][0];
+                bone_weights[i].weight1 = cpp_bone_weights[i][1];
+                bone_weights[i].weight2 = cpp_bone_weights[i][2];
+                bone_weights[i].weight3 = cpp_bone_weights[i][3];
+                // TODO: assert bone_weights in descending order
+            }
+
+            dragonSkinnedMeshRenderer.sharedMesh.boneWeights = bone_weights;
+
+            cpp_bone_indices.Dispose();
+            cpp_bone_weights.Dispose();
+        }
+        DragonUpdate();
+    }
+    void DragonUpdate() {
+        int numBones = dragon_getNumBones();
+
+        NativeArray<Vector3> bodyBones_y = new NativeArray<Vector3>(numBones, Allocator.Temp);
+        NativeArray<Vector3> bodyBones_z = new NativeArray<Vector3>(numBones, Allocator.Temp);
+        NativeArray<Vector3> bodyBones_o = new NativeArray<Vector3>(numBones, Allocator.Temp);
+
+        dragon_updateBones(NativeArrayUnsafeUtility.GetUnsafePtr(bodyBones_y),
+                NativeArrayUnsafeUtility.GetUnsafePtr(bodyBones_z),
+                NativeArrayUnsafeUtility.GetUnsafePtr(bodyBones_o));
+        for (int boneIndex = 0; boneIndex < numBones; boneIndex++) {
+            dragonBones[boneIndex].localPosition = bodyBones_o[boneIndex];
+            dragonBones[boneIndex].localRotation = Quaternion.LookRotation(bodyBones_z[boneIndex], bodyBones_y[boneIndex]);
+
+        }
+
+        bodyBones_y.Dispose();
+        bodyBones_z.Dispose();
+        bodyBones_o.Dispose();
+
+        dragonSkinnedMeshRenderer.sharedMesh.RecalculateBounds();
+    }
+
+
+
     void Awake () {
         Application.targetFrameRate = 60;
         DLLAwake();
@@ -595,8 +720,7 @@ unsafe public class Main : MonoBehaviour {
             }
         }
 
-        // dragonMeshManager = new DragonMeshManager(dragon_head, dragon_body);
-        // dragonMeshManager.SetUpAll();
+        DragonAwake();
 
         SolveWrapper(); 
 
@@ -628,6 +752,11 @@ unsafe public class Main : MonoBehaviour {
         }
         if (Input.GetKeyDown(KeyCode.C) || Input.GetKeyDown(KeyCode.F)) {
             GAME_OBJECT_SET_WHETHER_DRAWING(balloonParentObject, !GAME_OBJECT_IS_DRAWING(balloonParentObject));
+        }
+
+        if (Input.GetKeyDown(KeyCode.D)) {
+            dragonSkinnedMeshRenderer.enabled = !dragonSkinnedMeshRenderer.enabled;
+            dragonNonDragonMeshRenderer.enabled = !dragonNonDragonMeshRenderer.enabled;
         }
 
         if (AUTO_TEST_DO_TEST) {
@@ -728,6 +857,7 @@ unsafe public class Main : MonoBehaviour {
 
         UpdateCables();
         WidgetUpdate();
+        DragonUpdate();
 
         { // BalloonUpdate
             if (balloonNumberPopped < balloonNumberOfBalloons) {
@@ -917,6 +1047,8 @@ unsafe public class Main : MonoBehaviour {
 
 
 
+
+
 // public GameObject dragon_head;
 // public GameObject dragon_body;
 // DragonMeshManager dragonMeshManager;
@@ -925,228 +1057,7 @@ unsafe public class Main : MonoBehaviour {
 // GameObject head;
 
 /*
-   unsafe public class DragonMeshManager {
-   [DllImport("kernel32", SetLastError = true, CharSet = CharSet.Unicode)]
-   static public extern IntPtr LoadLibrary(string lpFileName);
-
-   [DllImport("kernel32")]
-   static public extern IntPtr GetProcAddress(IntPtr hModule, string procedureName);
-
-   [DllImport("kernel32", SetLastError = true)]
-   [return: MarshalAs(UnmanagedType.Bool)]
-   static public extern bool FreeLibrary(IntPtr hModule);
-
-   IntPtr library;
-
-   delegate int cpp_dragon_getNumVertices(int mesh_index);
-   delegate int cpp_dragon_getNumTriangles(int mesh_index);
-   delegate int cpp_dragon_getNumBones();
-
-   delegate void cpp_dragon_getMesh(
-   int mesh_index,
-   void* vertex_positions,
-   void* vertex_normals,
-   void* vertex_colors,
-   void* triangle_indices);
-
-   delegate void cpp_dragon_yzoBones(
-   void *bones_y,
-   void *bones_z,
-   void *bones_o);
-
-   delegate void cpp_dragon_initializeBones (
-   void *bones_y,
-   void *bones_z,
-   void *bones_o,
-   void *bone_indices,
-   void *bone_weights);
-
-   delegate void cpp_dragon_yzoHead (
-   void *bones_y,
-   void *bones_z,
-   void *bones_o);
-
-   cpp_dragon_getNumVertices dragon_getNumVertices;
-   cpp_dragon_getNumTriangles dragon_getNumTriangles;
-   cpp_dragon_getNumBones dragon_getNumBones;
-   cpp_dragon_getMesh dragon_getMesh;
-   cpp_dragon_yzoBones dragon_yzoBones;
-   cpp_dragon_initializeBones dragon_initializeBones;
-   cpp_dragon_yzoHead dragon_yzoHead;
-
-   void DLLAwake() {
-   library = LoadLibrary("Assets/snake");
-   dragon_getNumVertices = (cpp_dragon_getNumVertices) Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_dragon_getNumVertices"), typeof(cpp_dragon_getNumVertices));
-   dragon_getNumTriangles = (cpp_dragon_getNumTriangles) Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_dragon_getNumTriangles"), typeof(cpp_dragon_getNumTriangles));
-   dragon_getNumBones = (cpp_dragon_getNumBones) Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_dragon_getNumBones"), typeof(cpp_dragon_getNumBones));
-   dragon_getMesh = (cpp_dragon_getMesh) Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_dragon_getMesh"), typeof(cpp_dragon_getMesh));
-   dragon_yzoBones = (cpp_dragon_yzoBones) Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_dragon_yzoBones"), typeof(cpp_dragon_yzoBones));
-   dragon_initializeBones = (cpp_dragon_initializeBones) Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_dragon_initializeBones"), typeof(cpp_dragon_initializeBones));
-   dragon_yzoHead = (cpp_dragon_yzoHead) Marshal.GetDelegateForFunctionPointer(GetProcAddress(library, "cpp_dragon_yzoHead"), typeof(cpp_dragon_yzoHead));
-   }
-
-   private GameObject head;
-   private GameObject body;
-   const int HEAD = 0;
-   const int BODY = 1;
-   SkinnedMeshRenderer bodyRend;
-   NativeArray<Vector3> bodyBones_y;
-   NativeArray<Vector3> bodyBones_z;
-   NativeArray<Vector3> bodyBones_o;
-   Transform[] bodyBones;
-// Precondition: head and body gameobjects should have the following components:
-// - skinnedmeshrenderer
-// - material that supports vertex colors
-public DragonMeshManager(GameObject h, GameObject b) {
-    head = h;
-    body = b;
-    DLLAwake();
-}
-~DragonMeshManager() {
-    FreeLibrary(library);
-}
-public void SetUpAll() {
-    SetUp(HEAD);
-    SetUp(BODY);
-}
-public void SetUp(int index) {
-    GameObject dragon_object = (index == HEAD) ? head : body;
-
-    int triangleIndexCount = dragon_getNumTriangles(index) * 3; 
-
-    Mesh.MeshDataArray meshDataArray = Mesh.AllocateWritableMeshData(1);
-    Mesh.MeshData meshData = meshDataArray[0];
-    int vertexCount = dragon_getNumVertices(index);
-
-    var vertexAttributes = new NativeArray<VertexAttributeDescriptor>(3, Allocator.Temp);
-    vertexAttributes[0] = new VertexAttributeDescriptor(dimension: 3);
-    vertexAttributes[1] = new VertexAttributeDescriptor(VertexAttribute.Normal, dimension: 3, stream: 1);
-    vertexAttributes[2] = new VertexAttributeDescriptor(VertexAttribute.Color, dimension:4, stream: 2);
-    meshData.SetVertexBufferParams(vertexCount, vertexAttributes);
-    vertexAttributes.Dispose();
-
-    meshData.SetIndexBufferParams(triangleIndexCount, IndexFormat.UInt32);
-
-    dragon_getMesh(
-            index,
-            NativeArrayUnsafeUtility.GetUnsafePtr(meshData.GetVertexData<float3>(0)),
-            NativeArrayUnsafeUtility.GetUnsafePtr(meshData.GetVertexData<float3>(1)),
-            NativeArrayUnsafeUtility.GetUnsafePtr(meshData.GetVertexData<Color>(2)),
-            NativeArrayUnsafeUtility.GetUnsafePtr(meshData.GetIndexData<int>()));
-
-    meshData.subMeshCount = 1;
-    meshData.SetSubMesh(0, new SubMeshDescriptor(0, triangleIndexCount));
-
-    string mesh_name = (index == HEAD) ? "Dragon Head" : "Dragon Body";
-
-    Mesh dragon_mesh = new Mesh {
-        name = mesh_name
-    };
-
-    Mesh.ApplyAndDisposeWritableMeshData(meshDataArray, dragon_mesh);
-    dragon_mesh.RecalculateBounds();
-    dragon_object.GetComponent<SkinnedMeshRenderer>().sharedMesh = dragon_mesh;
-
-    if (index == BODY) {
-        int num_bones = dragon_getNumBones();
-        int num_vertices = dragon_getNumVertices(BODY);
-
-        bodyBones_y = new NativeArray<Vector3>(num_bones, Allocator.Temp);
-        bodyBones_z = new NativeArray<Vector3>(num_bones, Allocator.Temp);
-        bodyBones_o = new NativeArray<Vector3>(num_bones, Allocator.Temp);
-        NativeArray<Vector4Int> cpp_bone_indices = new NativeArray<Vector4Int>(num_vertices, Allocator.Temp);
-        NativeArray<Vector4> cpp_bone_weights = new NativeArray<Vector4>(num_vertices, Allocator.Temp);
-
-        dragon_initializeBones (NativeArrayUnsafeUtility.GetUnsafePtr(bodyBones_y),
-                NativeArrayUnsafeUtility.GetUnsafePtr(bodyBones_z),
-                NativeArrayUnsafeUtility.GetUnsafePtr(bodyBones_o),
-                NativeArrayUnsafeUtility.GetUnsafePtr(cpp_bone_indices),
-                NativeArrayUnsafeUtility.GetUnsafePtr(cpp_bone_weights));
-
-        Matrix4x4[] bindPoses = new Matrix4x4[num_bones];
-        bodyRend = dragon_object.GetComponent<SkinnedMeshRenderer>();
-        bodyBones = new Transform[num_bones];
-        bindPoses = new Matrix4x4[num_bones];
-        for (int boneIndex = 0; boneIndex < num_bones; boneIndex++) {
-            bodyBones[boneIndex] = new GameObject("Bone " + boneIndex.ToString()).transform;
-            bodyBones[boneIndex].parent = dragon_object.transform;
-            bodyBones[boneIndex].localPosition = bodyBones_o[boneIndex];
-            bodyBones[boneIndex].localRotation = Quaternion.identity; // Quaternion.LookRotation(bodyBones_z[boneIndex], bodyBones_y[boneIndex]);
-            bindPoses[boneIndex] = Matrix4x4.identity;// bones[boneIndex].worldToLocalMatrix * transform.localToWorldMatrix;
-        }
-        bodyRend.sharedMesh.bindposes = bindPoses;
-        bodyRend.bones = bodyBones;
-
-        BoneWeight[] bone_weights = new BoneWeight[num_vertices];
-        for (int i = 0; i < num_vertices; i++) {
-            bone_weights[i].boneIndex0 = cpp_bone_indices[i][0];
-            bone_weights[i].boneIndex1 = cpp_bone_indices[i][1];
-            bone_weights[i].boneIndex2 = cpp_bone_indices[i][2];
-            bone_weights[i].boneIndex3 = cpp_bone_indices[i][3];
-            bone_weights[i].weight0 = cpp_bone_weights[i][0];
-            bone_weights[i].weight1 = cpp_bone_weights[i][1];
-            bone_weights[i].weight2 = cpp_bone_weights[i][2];
-            bone_weights[i].weight3 = cpp_bone_weights[i][3];
-            // TODO: assert bone_weights in descending order
-        }
-
-        bodyRend.sharedMesh.boneWeights = bone_weights;
-
-        bodyBones_y.Dispose();
-        bodyBones_z.Dispose();
-        bodyBones_o.Dispose();
-        cpp_bone_indices.Dispose();
-        cpp_bone_weights.Dispose();
-
-    }
-}
-public void UpdateAll() {
-    Update(HEAD);
-    Update(BODY);
-}
-public void Update(int index) {
-    if (index == BODY) {
-        int num_bones = dragon_getNumBones();
-
-        bodyBones_y = new NativeArray<Vector3>(num_bones, Allocator.Temp);
-        bodyBones_z = new NativeArray<Vector3>(num_bones, Allocator.Temp);
-        bodyBones_o = new NativeArray<Vector3>(num_bones, Allocator.Temp);
-
-        dragon_yzoBones(NativeArrayUnsafeUtility.GetUnsafePtr(bodyBones_y),
-                NativeArrayUnsafeUtility.GetUnsafePtr(bodyBones_z),
-                NativeArrayUnsafeUtility.GetUnsafePtr(bodyBones_o));
-        for (int boneIndex = 0; boneIndex < num_bones; boneIndex++) {
-            bodyBones[boneIndex].localPosition = bodyBones_o[boneIndex];
-            bodyBones[boneIndex].localRotation = Quaternion.LookRotation(bodyBones_z[boneIndex], bodyBones_y[boneIndex]);
-
-        }
-
-        bodyBones_y.Dispose();
-        bodyBones_z.Dispose();
-        bodyBones_o.Dispose();
-
-        bodyRend.sharedMesh.RecalculateBounds();
-
-    }
-
-    else if (index == HEAD) {
-        NativeArray<float> head_y = new NativeArray<float>(3, Allocator.Temp);
-        NativeArray<float> head_z = new NativeArray<float>(3, Allocator.Temp);
-        NativeArray<float> head_o = new NativeArray<float>(3, Allocator.Temp);
-
-        dragon_yzoHead(NativeArrayUnsafeUtility.GetUnsafePtr(head_y),
-                NativeArrayUnsafeUtility.GetUnsafePtr(head_z),
-                NativeArrayUnsafeUtility.GetUnsafePtr(head_o));
-
-        head.transform.localPosition = new Vector3(head_o[0], head_o[1], head_o[2]);
-        head.transform.localRotation = Quaternion.LookRotation(new Vector3(head_z[0], head_z[1], head_z[2]),
-                new Vector3(head_y[0], head_y[1], head_y[2]));
-
-        head.GetComponent<SkinnedMeshRenderer>().sharedMesh.RecalculateBounds();
-    }
-}
-}
-*/
+ */
 
 // TODO
 

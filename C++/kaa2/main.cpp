@@ -15,7 +15,7 @@ int IK_MAX_LINE_SEARCH_STEPS = 8;
 #include "include.cpp"
 
 bool KAA_CPP_INIT_FLAG_TO_MAKE_DRAGON_DRIVING = false;
-bool USE_FRANCESCO_STL_INSTEAD = true;
+bool USE_FRANCESCO_STL_INSTEAD = false;
 boolean MESH_9_12_TOGGLE = false;
 
 
@@ -350,17 +350,26 @@ delegate void cpp_dragon_initializeMesh (void *vertex_positions, void *vertex_no
             ((UnityTriangleIndexInt*) triangle_indices)[3 * k + d] = (UnityTriangleIndexInt)(dragon.triangle_indices[k][d]);
         }
     }
+    #ifdef JIM_DLL
+    // need to flip orientation for unity (ew)
+    for_(i, dragon.num_triangles) {
+        UnityTriangleIndexInt tmp = ((UnityTriangleIndexInt *) triangle_indices)[3 * i + 0];
+        ((UnityTriangleIndexInt *) triangle_indices)[3 * i + 0] = ((UnityTriangleIndexInt *) triangle_indices)[3 * i + 1];
+        ((UnityTriangleIndexInt *) triangle_indices)[3 * i + 1] = tmp;
+    }
+    #endif
 }
 delegate void cpp_dragon_initializeBones(void *bone_indices, void *bone_weights) {
     ASSERT(initialized);
     for_(i, dragon.num_vertices) {
         for_(j, 4) {
-            ((UnityGeneralPurposeInt*)    bone_indices)[4 * i + j] = (UnityGeneralPurposeInt)(   dragon.bone_indices[i][j]);
+            ((UnityGeneralPurposeInt*)    bone_indices)[4 * i + j] = (UnityGeneralPurposeInt)   (dragon.bone_indices[i][j]);
             ((UnityVertexAttributeFloat*) bone_weights)[4 * i + j] = (UnityVertexAttributeFloat)(dragon.bone_weights[i][j]);
         }
     }
 }
 delegate void cpp_dragon_updateBones(void *bones_y, void *bones_z, void *bones_o) {
+    dragonAnimationTime += 0.0167; // FORNOW
     for_(i, dragon.num_bones) {
         for_(d, 3) {
             ((UnityVertexAttributeFloat*) bones_y)[3 * i + d] = (UnityVertexAttributeFloat)(_ZZZ(d) * currentBones[i](d, 1));

@@ -25,7 +25,7 @@ mat4 get_ray_C(vec3 ray_origin, vec3 ray_direction) {
     return M4_xyzo(x, y, z, ray_origin);
 }
 
-IntersectionResult GPU_pick(vec3 ray_origin, vec3 ray_direction, IndexedTriangleMesh3D *mesh) {
+IntersectionResult GPU_pick(vec3 ray_origin, vec3 ray_direction, IndexedTriangleMesh3D *mesh, real angle_of_view = RAD(1), bool DEBUG = false) {
     int num_vertices       = mesh->num_vertices;
     vec3 *vertex_positions = mesh->vertex_positions;
     int num_triangles      = mesh->num_triangles;
@@ -35,7 +35,18 @@ IntersectionResult GPU_pick(vec3 ray_origin, vec3 ray_direction, IndexedTriangle
     int4 *bone_indices     = mesh->bone_indices;
     vec4 *bone_weights     = mesh->bone_weights;
 
-    bool DEBUG = false; // draws ray eye view
+    int CENTER_PIXEL_X;
+    int CENTER_PIXEL_Y;
+    {
+        real width, height;
+        _window_get_size(&width, &height);
+        CENTER_PIXEL_X = int(width / 2);
+        CENTER_PIXEL_Y = int(height / 2);
+    }
+
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(CENTER_PIXEL_X, CENTER_PIXEL_Y, 1, 1);
+
 
     static char *picking_vertex_shader_source = R""(
             #version 330 core
@@ -87,7 +98,10 @@ IntersectionResult GPU_pick(vec3 ray_origin, vec3 ray_direction, IndexedTriangle
     static Shader shader = shader_create(picking_vertex_shader_source, picking_fragment_shader_source);
 
     mat4 ray_V = inverse(get_ray_C(ray_origin, ray_direction));
-    mat4 ray_PV = _window_get_P_perspective(RAD(1)) * ray_V;
+    mat4 ray_PV = _window_get_P_perspective(angle_of_view) * ray_V;
+
+    real s_frame = 0.40;
+    mat4 S_FRAME = M4_Scaling(0.01 + s_frame, (0.01 * _window_get_aspect()) + s_frame);
 
     IntersectionResult result = {};
     {
@@ -108,17 +122,13 @@ IntersectionResult GPU_pick(vec3 ray_origin, vec3 ray_direction, IndexedTriangle
                     shader_pass_vertex_attribute(&shader, num_vertices, bone_weights);
                     shader_draw(&shader, num_triangles, triangle_indices);
                 }
-
-                {
-                    real width, height;
-                    _window_get_size(&width, &height);
-                    glReadPixels(int(width / 2), int(height / 2), 1, 1, GL_RGB, GL_UNSIGNED_BYTE, rgb);
-                }
+                glReadPixels(CENTER_PIXEL_X, CENTER_PIXEL_Y, 1, 1, GL_RGB, GL_UNSIGNED_BYTE, rgb);
             } glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
             if (DEBUG) {
                 glDisable(GL_DEPTH_TEST);
-                library.meshes.square.draw(M4_Translation(0.5, 0.5) * M4_Scaling(0.3), globals.Identity, globals.Identity, {}, texture.name);
+                library.meshes.square.draw(M4_Translation(0.5, 0.5) * S_FRAME, globals.Identity, globals.Identity, {});
+                library.meshes.square.draw(M4_Translation(0.5, 0.5) * M4_Scaling(s_frame), globals.Identity, globals.Identity, {}, texture.name);
                 glEnable(GL_DEPTH_TEST);
             }
         }
@@ -147,11 +157,8 @@ IntersectionResult GPU_pick(vec3 ray_origin, vec3 ray_direction, IndexedTriangle
                     shader_draw(&shader, 1, _triangle_indices);
                 }
 
-                u8 rgb2[3]; {
-                    real width, height;
-                    _window_get_size(&width, &height);
-                    glReadPixels(int(width / 2), int(height / 2), 1, 1, GL_RGB, GL_UNSIGNED_BYTE, rgb2);
-                }
+                u8 rgb2[3];
+                glReadPixels(CENTER_PIXEL_X, CENTER_PIXEL_Y, 1, 1, GL_RGB, GL_UNSIGNED_BYTE, rgb2);
                 for_(d, 3) result.w[d] = rgb2[d] / 255.0;
 
             } glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -160,20 +167,40 @@ IntersectionResult GPU_pick(vec3 ray_origin, vec3 ray_direction, IndexedTriangle
 
             if (DEBUG) {
                 glDisable(GL_DEPTH_TEST);
-                library.meshes.square.draw(M4_Translation(0.5, -0.5) * M4_Scaling(0.3), globals.Identity, globals.Identity, {}, texture.name);
+                library.meshes.square.draw(M4_Translation(0.5, -0.5) * S_FRAME, globals.Identity, globals.Identity, {});
+                library.meshes.square.draw(M4_Translation(0.5, -0.5) * M4_Scaling(s_frame), globals.Identity, globals.Identity, {}, texture.name);
                 glEnable(GL_DEPTH_TEST);
             }
         }
     }
+
+    glDisable(GL_SCISSOR_TEST);
+
     return result;
 } 
 
 void eg_fbo() {
-    IndexedTriangleMesh3D mesh = library.meshes.bean;
+    // IndexedTriangleMesh3D mesh = library.meshes.bean;
+    IndexedTriangleMesh3D _dragonHead = _meshutil_indexed_triangle_mesh_load("dragon_head.obj", false, true, false);
+    IndexedTriangleMesh3D _dragonBody = _meshutil_indexed_triangle_mesh_load("dragon_body.obj", false, true, false);
+    _dragonBody._applyTransform(M4_Translation(0.0, 0.0, -1.4));
+    IndexedTriangleMesh3D mesh = _dragonHead + _dragonBody; 
+    mesh._applyTransform(M4_Scaling(0.3));
+    mesh.num_bones = 1;
+    mesh.bones = (mat4 *) malloc(sizeof(mat4));
+    mesh.bone_indices = (int4 *) malloc(mesh.num_vertices * sizeof(int4));
+    mesh.bone_weights = (vec4 *) malloc(mesh.num_vertices * sizeof(vec4));
+    mesh.bones[0] = M4_Identity();
+    for_(i, mesh.num_vertices) mesh.bone_indices[i] = { 0 };
+    for_(i, mesh.num_vertices) mesh.bone_weights[i] = { 1.0 };
+
+
+    real angle_of_view = 0.04836;
+
 
     Camera3D camera = { 6.0 };
     real time = 0.0;
-    window_set_clear_color(0.9, 1.0, 1.0);
+    window_set_clear_color(1.0, 1.0, 1.0);
     while (cow_begin_frame()) {
         camera_move(&camera);
         mat4 P = camera_get_P(&camera);
@@ -184,28 +211,29 @@ void eg_fbo() {
         if (!paused) time += 0.0167;
         gui_readout("time", &time);
 
-        mesh.bones[0] = M4_RotationAboutXAxis(sin(0.1 * time));
+        // mesh.bones[0] = M4_RotationAboutXAxis(sin(0.1 * time));
 
         vec3 ray_origin = { -1.3, 0.0, 0.0 };
         vec3 ray_direction; {
-            static real a = 0.1;
-            static real b = 0.0;
+            static real a = -0.02410;
+            static real b = 0.36145;
             gui_slider("a", &a, -1.0, 1.0);
             gui_slider("b", &b, -1.0, 1.0);
             ray_direction = normalized(V3(1.0, a, b));
         }
+        gui_slider("angle_of_view", &angle_of_view, RAD(1), RAD(15));
 
-        IntersectionResult result = GPU_pick(ray_origin, ray_direction, &mesh);
+        IntersectionResult result = GPU_pick(ray_origin, ray_direction, &mesh, angle_of_view, true);
 
         { // draw
             mesh.draw(P, V, globals.Identity);
-            draw_pipe(P, V, ray_origin, result.p, monokai.blue, 1.0);
-            if (result.hit) draw_ball(P, V, result.p, monokai.yellow, 2.0);
+            draw_pipe(P, V, ray_origin, result.p, V3(1.0, 0.0, 1.0), 1.0);
+            if (result.hit) draw_ball(P, V, result.p, monokai.black, 1.3);
 
             { // draw camera box
                 mat4 ray_C = get_ray_C(ray_origin, ray_direction);
                 library.soups.box.draw(P * V * ray_C * M4_Scaling(0.1), monokai.gray);
-                library.soups.axes.draw(P * V * ray_C * M4_Scaling(0.3));
+                // library.soups.axes.draw(P * V * ray_C * M4_Scaling(0.3));
             }
         }
     }

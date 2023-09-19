@@ -545,7 +545,6 @@ unsafe public class Main : MonoBehaviour {
 
 
     GameObject[][][] cables;
-    public GameObject cablesParentObject;
     NativeArray<int> num_vias; 
     NativeArray<float3> cable_positions;
     NativeArray<float> tensions;
@@ -647,7 +646,7 @@ unsafe public class Main : MonoBehaviour {
                 NativeArrayUnsafeUtility.GetUnsafePtr(bodyBones_o));
         for (int boneIndex = 0; boneIndex < numBones; boneIndex++) {
             dragonBones[boneIndex].localPosition = bodyBones_o[boneIndex];
-            dragonBones[boneIndex].localRotation = Quaternion.LookRotation(bodyBones_z[boneIndex], bodyBones_y[boneIndex]);
+            dragonBones[boneIndex].localRotation = Quaternion.LookRotation(-bodyBones_z[boneIndex], bodyBones_y[boneIndex]);
 
         }
 
@@ -670,8 +669,8 @@ unsafe public class Main : MonoBehaviour {
 
         cameraOffset = GameObject.Find("CameraOffset");
 
-        init(true);
-        // init(false);
+        // init(true);
+        init(false);
 
         WidgetAwake();
 
@@ -757,6 +756,7 @@ unsafe public class Main : MonoBehaviour {
         if (Input.GetKeyDown(KeyCode.D)) {
             dragonSkinnedMeshRenderer.enabled = !dragonSkinnedMeshRenderer.enabled;
             dragonNonDragonMeshRenderer.enabled = !dragonNonDragonMeshRenderer.enabled;
+            GAME_OBJECT_SET_WHETHER_DRAWING(cablesParentObject, !GAME_OBJECT_IS_DRAWING(cablesParentObject));
         }
 
         if (AUTO_TEST_DO_TEST) {
@@ -941,7 +941,10 @@ unsafe public class Main : MonoBehaviour {
         return false;
     }
 
+    GameObject cablesParentObject;
     GameObject[][][] CablesInit() {
+        cablesParentObject = GameObject.Find("Cables");
+        // GAME_OBJECT_SET_WHETHER_DRAWING(cablesParentObject, !GAME_OBJECT_IS_DRAWING(cablesParentObject));
         int num_cables = getNumCables();
         num_vias = new NativeArray<int>(num_cables, Allocator.Persistent);
 

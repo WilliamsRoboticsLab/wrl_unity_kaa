@@ -35,6 +35,11 @@ IntersectionResult GPU_pick(vec3 ray_origin, vec3 ray_direction, IndexedTriangle
     int4 *bone_indices     = mesh->bone_indices;
     vec4 *bone_weights     = mesh->bone_weights;
 
+
+    // TODO
+    static Shader bakedDragon;
+
+
     int CENTER_PIXEL_X;
     int CENTER_PIXEL_Y;
     {

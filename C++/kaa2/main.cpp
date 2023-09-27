@@ -1330,8 +1330,8 @@ void main() {
     omp_set_num_threads(6);
     APPS {
         // APP(jones);
-        // APP(kaa);
-        APP(eg_fbo);
+        APP(kaa);
+        // APP(eg_fbo);
     }
 }
 

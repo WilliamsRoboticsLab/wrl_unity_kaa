@@ -49,8 +49,8 @@ IntersectionResult GPU_pick(vec3 ray_origin, vec3 ray_direction, IndexedTriangle
         CENTER_PIXEL_Y = int(height / 2);
     }
 
-    // glEnable(GL_SCISSOR_TEST);
-    // glScissor(CENTER_PIXEL_X, CENTER_PIXEL_Y, 1, 1);
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(CENTER_PIXEL_X, CENTER_PIXEL_Y, 1, 1);
 
 
     static char *picking_vertex_shader_source = R""(
@@ -88,10 +88,6 @@ IntersectionResult GPU_pick(vec3 ray_origin, vec3 ray_direction, IndexedTriangle
                 vec3 color = w;
                 if (!IndexIfFalse_BarycentricWeightsIfTrue) {
                     int i = gl_PrimitiveID;
-                    // for (int d = 0; d < 3; ++d) {
-                    //     color[d] = (i % 256) / 255.0;
-                    //     i /= 256;
-                    // }
                     color[0] = (i % 256);
                     color[1] = ((i / 256) % 256);
                     color[2] = ((i / (256 * 256)) % 256);
@@ -123,10 +119,16 @@ IntersectionResult GPU_pick(vec3 ray_origin, vec3 ray_direction, IndexedTriangle
                     shader_set_uniform          (&bakedShader, "transform", ray_PV);
                     shader_set_uniform          (&bakedShader, "time", time);
                     shader_set_uniform          (&bakedShader, "IndexIfFalse_BarycentricWeightsIfTrue", false);
-                    shader_pass_vertex_attribute(&bakedShader, num_vertices, vertex_positions);
-                    shader_pass_vertex_attribute(&bakedShader, num_vertices, bone_indices);
-                    shader_pass_vertex_attribute(&bakedShader, num_vertices, bone_weights);
-                    shader_draw                 (&bakedShader, num_triangles, triangle_indices);
+                    do_once {
+                        shader_pass_vertex_attribute(&bakedShader, num_vertices, vertex_positions);
+                        shader_pass_vertex_attribute(&bakedShader, num_vertices, bone_indices);
+                        shader_pass_vertex_attribute(&bakedShader, num_vertices, bone_weights);
+                        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, bakedShader._EBO);
+                        glBufferData(GL_ELEMENT_ARRAY_BUFFER, 3 * num_triangles * sizeof(int), triangle_indices, GL_STATIC_DRAW);
+                    };
+                    glUseProgram(bakedShader._program_ID);
+                    glBindVertexArray(bakedShader._VAO);
+                    glDrawElements(GL_TRIANGLES, 3 * num_triangles, GL_UNSIGNED_INT, NULL);
                 }
                 glReadPixels(CENTER_PIXEL_X, CENTER_PIXEL_Y, 1, 1, GL_RGB, GL_UNSIGNED_BYTE, rgb);
             } glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -181,7 +183,7 @@ IntersectionResult GPU_pick(vec3 ray_origin, vec3 ray_direction, IndexedTriangle
         }
     }
 
-    // glDisable(GL_SCISSOR_TEST);
+    glDisable(GL_SCISSOR_TEST);
 
     return result;
 } 

@@ -669,8 +669,8 @@ unsafe public class Main : MonoBehaviour {
 
         cameraOffset = GameObject.Find("CameraOffset");
 
-        // init(true);
-        init(false);
+        init(true);
+        // init(false);
 
         WidgetAwake();
 

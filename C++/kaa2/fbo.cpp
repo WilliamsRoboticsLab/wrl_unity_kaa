@@ -49,8 +49,10 @@ IntersectionResult GPU_pick(vec3 ray_origin, vec3 ray_direction, IndexedTriangle
         CENTER_PIXEL_Y = int(height / 2);
     }
 
-    glEnable(GL_SCISSOR_TEST);
-    glScissor(CENTER_PIXEL_X, CENTER_PIXEL_Y, 1, 1);
+    if (!DEBUG) {
+        glEnable(GL_SCISSOR_TEST);
+        glScissor(CENTER_PIXEL_X, CENTER_PIXEL_Y, 1, 1);
+    }
 
 
     static char *picking_vertex_shader_source = R""(
@@ -183,7 +185,9 @@ IntersectionResult GPU_pick(vec3 ray_origin, vec3 ray_direction, IndexedTriangle
         }
     }
 
-    glDisable(GL_SCISSOR_TEST);
+    if (!DEBUG) {
+        glDisable(GL_SCISSOR_TEST);
+    }
 
     return result;
 } 
@@ -226,8 +230,8 @@ void eg_fbo() {
         vec3 ray_direction; {
             static real a = -0.02410;
             static real b = 0.36145;
-            gui_slider("a", &a, -1.0, 1.0);
-            gui_slider("b", &b, -1.0, 1.0);
+            gui_slider("a", &a, -0.05, 0.05);
+            gui_slider("b", &b, 0.30, 0.40);
             ray_direction = normalized(V3(1.0, a, b));
         }
         gui_slider("angle_of_view", &angle_of_view, RAD(1), RAD(15));
@@ -236,8 +240,11 @@ void eg_fbo() {
 
         { // draw
             mesh.draw(P, V, globals.Identity);
-            draw_pipe(P, V, ray_origin, result.p, V3(1.0, 0.0, 1.0), 1.0);
-            if (result.hit) draw_ball(P, V, result.p, monokai.black, 1.3);
+            draw_pipe(P, V, ray_origin, ray_origin + ray_direction, V3(1.0, 0.0, 1.0), 1.0);
+            if (result.hit) {
+                draw_pipe(P, V, ray_origin, result.p, V3(1.0, 0.0, 1.0), 1.0);
+                draw_ball(P, V, result.p, monokai.black, 1.3);
+            }
 
             { // draw camera box
                 mat4 ray_C = get_ray_C(ray_origin, ray_direction);
